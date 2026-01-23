@@ -1,9 +1,11 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { ROLES } from "./roles";
 
 const AuthContext = createContext(null);
+
+const STORAGE_KEY = "medtrack_auth";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState({
@@ -11,14 +13,24 @@ export function AuthProvider({ children }) {
     role: null,
   });
 
+  // Load session (UI-only persistence)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) setUser(JSON.parse(saved));
+  }, []);
+
+  // Persist session
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+  }, [user]);
+
   const loginAsPatient = () =>
     setUser({ isAuthenticated: true, role: ROLES.PATIENT });
 
   const loginAsDoctor = () =>
     setUser({ isAuthenticated: true, role: ROLES.DOCTOR });
-
-  const loginAsAdmin = () =>
-    setUser({ isAuthenticated: true, role: ROLES.ADMIN });
 
   const logout = () =>
     setUser({ isAuthenticated: false, role: null });
@@ -29,7 +41,6 @@ export function AuthProvider({ children }) {
         user,
         loginAsPatient,
         loginAsDoctor,
-        loginAsAdmin,
         logout,
       }}
     >
