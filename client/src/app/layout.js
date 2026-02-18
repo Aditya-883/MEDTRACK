@@ -1,25 +1,23 @@
-import "./globals.css";
-import Navbar from "../components/layout/Navbar";
-import Footer from "../components/layout/Footer";
-import { AuthProvider } from "../auth/authContext";
+import './globals.css'
+import Navbar from '@/components/layout/Navbar'
+import Footer from '@/components/layout/Footer'
 
 export const metadata = {
-  title: "MedTrack",
-  description: "Secure Healthcare Records on Blockchain",
-};
+  title: 'MedTrack',
+  description: 'Medical Tracking System',
+  viewport: 'width=device-width, initial-scale=1.0'
+}
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50 text-gray-900">
-        <AuthProvider>
-          <Navbar />
-          <main className="container mx-auto px-4 py-6">
-            {children}
-          </main>
-          <Footer />
-        </AuthProvider>
+      <body>
+        <Navbar />
+        <main className="container">
+          {children}
+        </main>
+        <Footer />
       </body>
     </html>
-  );
+  )
 }

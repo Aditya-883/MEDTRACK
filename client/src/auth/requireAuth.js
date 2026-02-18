@@ -1,27 +1,21 @@
 "use client";
-
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "./authContext";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
-export function RequireAuth({ role, children }) {
-  const router = useRouter();
-  const { user } = useAuth();
+export default function requireAuth(Component, role) {
+  return function Protected() {
+    const { user } = useAuth();
+    const router = useRouter();
 
-  useEffect(() => {
-    if (!user.isAuthenticated) {
-      router.replace("/login");
-      return;
-    }
-    if (role && user.role !== role) {
-      router.replace("/login");
-    }
-  }, [user, role, router]);
+    useEffect(() => {
+      if (!user || user.role !== role) {
+        router.replace("/");
+      }
+    }, [user, router]);
 
-  // While redirecting, render nothing
-  if (!user.isAuthenticated || (role && user.role !== role)) {
-    return null;
-  }
+    if (!user) return <p className="container">Loading...</p>;
 
-  return children;
+    return <Component />;
+  };
 }

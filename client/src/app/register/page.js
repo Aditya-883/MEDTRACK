@@ -2,31 +2,35 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { loginUser } from "@/lib/auth"
+import { registerUser } from "@/lib/auth"
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter()
   const [role, setRole] = useState("patient")
   const [id, setId] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
 
-  const handleLogin = () => {
-    const user = loginUser(id, password, role)
-
-    if (!user) {
-      setError("❌ Invalid ID or password")
+  const handleRegister = () => {
+    if (!id || !password) {
+      setError("❌ All fields are required")
       return
     }
 
-    router.push(`/${role}`)
+    const success = registerUser(id, password, role)
+
+    if (!success) {
+      setError("❌ User already exists")
+      return
+    }
+
+    router.push("/login")
   }
 
   return (
-    <div style={{ padding: "40px", maxWidth: "400px" }}>
-      <h1>🔐 Login</h1>
+    <div style={{ padding: 40, maxWidth: 400 }}>
+      <h1>📝 Register</h1>
 
-      <label>Role</label>
       <select value={role} onChange={(e) => setRole(e.target.value)}>
         <option value="admin">🛠️ Admin</option>
         <option value="doctor">🩺 Doctor</option>
@@ -35,34 +39,24 @@ export default function LoginPage() {
 
       <br /><br />
 
-      <label>ID / Email</label>
       <input
-        placeholder="Enter your ID"
+        placeholder="Email / ID"
         value={id}
         onChange={(e) => setId(e.target.value)}
       />
 
       <br /><br />
 
-      <label>Password</label>
       <input
         type="password"
-        placeholder="Enter password"
+        placeholder="Password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
 
       <br /><br />
 
-      <button onClick={handleLogin}>➡️ Login</button>
-
-      {/* ✅ REGISTER LINK ADDED HERE */}
-      <p style={{ marginTop: "15px" }}>
-        New user?{" "}
-        <a href="/register" style={{ color: "#2563eb", fontWeight: "bold" }}>
-          Register here
-        </a>
-      </p>
+      <button onClick={handleRegister}>✅ Register</button>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
     </div>

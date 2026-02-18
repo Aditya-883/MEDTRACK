@@ -1,51 +1,63 @@
 export default function HomePage() {
   return (
-    <section className="bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6 py-24 grid md:grid-cols-2 gap-12 items-center">
-        {/* Left Content */}
-        <div>
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 leading-tight">
-            Secure Healthcare Records, <br />
-            <span className="text-blue-600">Powered by Blockchain</span>
-          </h1>
+    <div className="home-page">
+      
+      {/* HERO SECTION */}
+      <section className="home-hero">
+        <h1>🏥 MedTrack</h1>
+        <p className="home-tagline">
+          Smart, secure & role-based medical tracking — built for
+          <span> Admins</span>, <span>Doctors</span> & <span>Patients</span>.
+        </p>
 
-          <p className="mt-6 text-lg text-gray-600">
-            MedTrack is a patient-owned Electronic Health Record platform that
-            ensures privacy, transparency, and secure access using blockchain
-            technology.
+        <div className="home-buttons">
+          <a href="/admin/login" className="home-btn admin">🛠️ Admin</a>
+          <a href="/doctor/login" className="home-btn doctor">🩺 Doctor</a>
+          <a href="/patient/login" className="home-btn patient">🧑‍⚕️ Patient</a>
+        </div>
+      </section>
+
+      {/* FEATURES */}
+      <section className="home-features">
+        <div className="feature-card">
+          🛡️
+          <h3>Secure Access</h3>
+          <p>
+            Role-based login ensures doctors, patients, and admins
+            only see what they are authorized to view.
           </p>
-
-          <div className="mt-8 flex gap-4">
-            <a
-              href="/patient"
-              className="px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
-            >
-              Patient Portal
-            </a>
-            <a
-              href="/doctor"
-              className="px-6 py-3 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition"
-            >
-              Doctor Portal
-            </a>
-          </div>
         </div>
 
-        {/* Right Visual */}
-        <div className="hidden md:block">
-          <div className="bg-white rounded-2xl shadow-xl p-10 border">
-            <h3 className="text-xl font-semibold text-gray-900">
-              Why MedTrack?
-            </h3>
-            <ul className="mt-4 space-y-3 text-gray-600">
-              <li>✔ Patient-controlled access</li>
-              <li>✔ Tamper-proof medical records</li>
-              <li>✔ Secure doctor-patient sharing</li>
-              <li>✔ Built for real-world hospitals</li>
-            </ul>
-          </div>
+        <div className="feature-card">
+          📋
+          <h3>Organized Records</h3>
+          <p>
+            Doctors manage consultations, prescriptions, and reports
+            without exposing sensitive patient data.
+          </p>
         </div>
-      </div>
-    </section>
-  );
+
+        <div className="feature-card">
+          📊
+          <h3>Admin Control</h3>
+          <p>
+            Admins can manage doctors, monitor system usage, and
+            maintain platform integrity.
+          </p>
+        </div>
+      </section>
+
+      {/* INFO SECTION */}
+      <section className="home-info">
+        <h2>✨ Why MedTrack?</h2>
+        <ul>
+          <li>✅ Clean & responsive design</li>
+          <li>✅ Privacy-focused architecture</li>
+          <li>✅ Separate dashboards for each role</li>
+          <li>✅ Scalable for real hospital systems</li>
+        </ul>
+      </section>
+
+    </div>
+  )
 }
