@@ -263,3 +263,159 @@ footer {
     font-size: 16px;
   }
 }
+/* ================= ADMIN DASHBOARD ================= */
+
+.admin-container {
+  min-height: 100vh;
+  padding: 40px 6%;
+  background: linear-gradient(135deg, #020617, #050b1f);
+  color: #ffffff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+/* Header */
+.admin-header {
+  margin-bottom: 45px;
+}
+
+.admin-header h1 {
+  font-size: 2.8rem;
+  font-weight: 700;
+}
+
+.admin-header p {
+  margin-top: 10px;
+  font-size: 1.1rem;
+  color: #cbd5e1;
+}
+
+/* Cards Grid */
+.admin-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 28px;
+  margin-bottom: 60px;
+}
+
+/* Card */
+.admin-card {
+  background: linear-gradient(145deg, #0ea5e9, #38bdf8);
+  color: #020617;
+  padding: 28px;
+  border-radius: 20px;
+  box-shadow: 0 18px 40px rgba(14, 165, 233, 0.35);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.admin-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 30px 60px rgba(56, 189, 248, 0.55);
+}
+
+.admin-card h3 {
+  font-size: 1.35rem;
+  margin-bottom: 10px;
+}
+
+.admin-card p {
+  font-size: 0.95rem;
+  margin-bottom: 18px;
+}
+
+/* Buttons */
+.admin-card button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 12px;
+  background: #020617;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.admin-card button:hover {
+  background: #020617e6;
+  transform: scale(1.05);
+}
+
+/* Access Section */
+.admin-access {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 32px;
+  border-radius: 18px;
+  backdrop-filter: blur(8px);
+}
+
+.admin-access h2 {
+  margin-bottom: 18px;
+  font-size: 1.5rem;
+}
+
+.admin-access ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.admin-access li {
+  margin-bottom: 12px;
+  padding-left: 26px;
+  position: relative;
+  color: #e2e8f0;
+}
+
+.admin-access li::before {
+  content: "✔";
+  position: absolute;
+  left: 0;
+  color: #38bdf8;
+  font-weight: bold;
+}
+
+
+
+/* Buttons Layout */
+.admin-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-bottom: 40px;
+}
+
+.admin-btn {
+  background: linear-gradient(145deg, #38bdf8, #0ea5e9);
+  border: none;
+  padding: 18px;
+  border-radius: 16px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #020617;
+  box-shadow: 0 12px 30px rgba(56, 189, 248, 0.4);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.admin-btn:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 45px rgba(56, 189, 248, 0.6);
+}
+
+/* Data Section */
+.admin-data {
+  margin-top: 30px;
+}
+
+.admin-data h2 {
+  margin-bottom: 20px;
+}
+
+/* Data Card */
+.data-card {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 18px 22px;
+  border-radius: 14px;
+  margin-bottom: 15px;
+  color: #e2e8f0;
+  backdrop-filter: blur(6px);
+}
