@@ -5,7 +5,7 @@ export default function DoctorDashboard() {
     <div className="doctor-page">
       <h1 className="doctor-title">🩺 Doctor Dashboard</h1>
 
-      <p className="doctor-subtitle">
+      <p className="doctor-subtitle">    
         Manage your appointments, patients, and medical records securely
       </p>
 
