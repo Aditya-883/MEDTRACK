@@ -1,23 +1,16 @@
-import './globals.css'
-import Navbar from '@/components/layout/Navbar'
-import Footer from '@/components/layout/Footer'
-
-export const metadata = {
-  title: 'MedTrack',
-  description: 'Medical Tracking System',
-  viewport: 'width=device-width, initial-scale=1.0'
-}
+import "./globals.css";
+import Navbar from "../components/layout/Navbar";
+import { Web3Provider } from "../context/Web3Context";
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <Navbar />
-        <main className="container">
+        <Web3Provider>
+          <Navbar />
           {children}
-        </main>
-        <Footer />
+        </Web3Provider>
       </body>
     </html>
-  )
+  );
 }
