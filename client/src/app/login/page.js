@@ -1,70 +1,31 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { loginUser } from "@/lib/auth"
+import { useWeb3 } from "../../context/Web3Context";
 
 export default function LoginPage() {
-  const router = useRouter()
-  const [role, setRole] = useState("patient")
-  const [id, setId] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
+  const { account, connectWallet, loading } = useWeb3();
 
-  const handleLogin = () => {
-    const user = loginUser(id, password, role)
-
-    if (!user) {
-      setError("❌ Invalid ID or password")
-      return
-    }
-
-    router.push(`/${role}`)
-  }
+  if (loading) return <p>Loading...</p>;
 
   return (
-    <div style={{ padding: "40px", maxWidth: "400px" }}>
-      <h1>🔐 Login</h1>
+    <div className="flex flex-col items-center justify-center h-screen">
+      <h1 className="text-3xl font-bold mb-6">MedTrack Login</h1>
 
-      <label>Role</label>
-      <select value={role} onChange={(e) => setRole(e.target.value)}>
-        <option value="admin">🛠️ Admin</option>
-        <option value="doctor">🩺 Doctor</option>
-        <option value="patient">🧑‍⚕️ Patient</option>
-      </select>
-
-      <br /><br />
-
-      <label>ID / Email</label>
-      <input
-        placeholder="Enter your ID"
-        value={id}
-        onChange={(e) => setId(e.target.value)}
-      />
-
-      <br /><br />
-
-      <label>Password</label>
-      <input
-        type="password"
-        placeholder="Enter password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-
-      <br /><br />
-
-      <button onClick={handleLogin}>➡️ Login</button>
-
-      {/* ✅ REGISTER LINK ADDED HERE */}
-      <p style={{ marginTop: "15px" }}>
-        New user?{" "}
-        <a href="/register" style={{ color: "#2563eb", fontWeight: "bold" }}>
-          Register here
-        </a>
-      </p>
-
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      {account ? (
+        <>
+          <p className="mb-2">Connected Wallet:</p>
+          <p className="text-green-600 font-mono break-all">
+            {account}
+          </p>
+        </>
+      ) : (
+        <button
+          onClick={connectWallet}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg"
+        >
+          Connect MetaMask
+        </button>
+      )}
     </div>
-  )
+  );
 }

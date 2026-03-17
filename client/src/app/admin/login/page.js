@@ -4,7 +4,7 @@ import { useState } from "react";
 export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState(null);
 
-  // Mock data (replace later with API)
+  // Mock data 
   const doctors = [
     { name: "Dr. Amit Sharma", dept: "Cardiology", available: "Mon–Fri" },
     { name: "Dr. Neha Verma", dept: "Neurology", available: "Tue–Sat" },
