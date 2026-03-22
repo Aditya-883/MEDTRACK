@@ -1,39 +1,49 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { getProvider } from "../web3/provider";
 import { NETWORK } from "../web3/config";
+import { getRole } from "../lib/roles";
 
-const Web3Context = createContext();
+const Web3Context = createContext(null);
 
 export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
+  const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔌 Connect wallet
+  // 🔌 CONNECT WALLET
   const connectWallet = async () => {
-    console.log("Ethereum object:", window.ethereum);
     try {
-      if (!window.ethereum) {
-        alert("Install MetaMask");
+      if (typeof window === "undefined" || !window.ethereum) {
+        alert("Please install MetaMask");
         return;
       }
 
-      const provider = getProvider();
+      // 👉 Switch network FIRST
+      await switchNetwork();
 
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
       });
 
-      setAccount(accounts[0]);
+      const addr = accounts[0];
 
-      await switchNetwork();
-    } catch (error) {
-      console.error(error);
+      console.log("Connected Address:", addr);
+
+      setAccount(addr);
+
+      // 👉 SET ROLE
+      const userRole = getRole(addr);
+      console.log("Detected Role:", userRole);
+
+      setRole(userRole);
+    } catch (err) {
+      console.error("Wallet connection error:", err);
+      alert("Wallet connection failed");
     }
   };
 
-  // 🌐 Switch to Hardhat network
+  // 🌐 SWITCH NETWORK
   const switchNetwork = async () => {
     try {
       await window.ethereum.request({
@@ -41,46 +51,52 @@ export const Web3Provider = ({ children }) => {
         params: [{ chainId: NETWORK.chainId }],
       });
     } catch (err) {
+      // 👉 Network not added
       if (err.code === 4902) {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [NETWORK],
-        });
+        try {
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [NETWORK],
+          });
+        } catch (addErr) {
+          console.error("Add network error:", addErr);
+        }
+      } else {
+        console.error("Switch network error:", err);
       }
     }
   };
 
-  // 🔄 Auto reconnect
+  // 🔄 CHECK EXISTING CONNECTION (ON LOAD)
   useEffect(() => {
     const checkConnection = async () => {
-      if (window.ethereum) {
-        const accounts = await window.ethereum.request({
-          method: "eth_accounts",
-        });
+      try {
+        if (typeof window !== "undefined" && window.ethereum) {
+          const accounts = await window.ethereum.request({
+            method: "eth_accounts",
+          });
 
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
+          if (accounts.length > 0) {
+            const addr = accounts[0];
+            setAccount(addr);
+            setRole(getRole(addr));
+          }
         }
+      } catch (err) {
+        console.error("Check connection error:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     checkConnection();
-  }, []);
-
-  // 🔁 Account change listener
-  useEffect(() => {
-    if (window.ethereum) {
-      window.ethereum.on("accountsChanged", (accounts) => {
-        setAccount(accounts[0] || null);
-      });
-    }
   }, []);
 
   return (
     <Web3Context.Provider
       value={{
         account,
+        role,
         connectWallet,
         loading,
       }}
@@ -90,4 +106,13 @@ export const Web3Provider = ({ children }) => {
   );
 };
 
-export const useWeb3 = () => useContext(Web3Context);
+// 🔁 CUSTOM HOOK
+export const useWeb3 = () => {
+  const context = useContext(Web3Context);
+
+  if (!context) {
+    throw new Error("useWeb3 must be used within Web3Provider");
+  }
+
+  return context;
+};
