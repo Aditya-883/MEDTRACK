@@ -1,71 +1,134 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { getContract } from "../../web3/contract";
+import { useState, useEffect } from 'react';
+import { getContract } from '../../web3/contract';
+import { decryptData } from '../../utils/encryption';
 
 export default function DoctorPage() {
-  const [patientAddress, setPatientAddress] = useState("");
+  const [account, setAccount] = useState(null);
+  const [patientAddress, setPatientAddress] = useState('');
   const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // 🔍 Fetch patient records
-  const fetchRecords = async () => {
+  useEffect(() => {
+    if (!window.ethereum) return;
+
+    async function init() {
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts',
+      });
+      setAccount(accounts[0]);
+    }
+
+    init();
+  }, []);
+
+  // ✅ Simple CID validation
+  function isValidCID(hash) {
+    return hash && hash.startsWith("Qm") && hash.length > 40;
+  }
+
+  // ✅ IPFS URL
+  function getIPFSUrl(hash) {
+    return `https://ipfs.io/ipfs/${hash}`;
+  }
+
+  async function fetchRecords() {
     if (!patientAddress) {
       alert("Enter patient address");
       return;
     }
 
     try {
+      setLoading(true);
+
       const contract = await getContract();
 
       const data = await contract.viewRecords(patientAddress);
 
-      console.log("Patient Records:", data);
+      const validRecords = [];
 
-      setRecords(data);
+      for (let r of data) {
+        try {
+          const hash = decryptData(r.ipfsHash);
+
+          // ❌ Skip broken/old records
+          if (!isValidCID(hash)) {
+            console.warn("Skipping invalid record:", hash);
+            continue;
+          }
+
+          validRecords.push({
+            hash,
+            fileType: r.fileType,
+            fileName: r.fileName,
+            uploadedBy: r.uploadedBy,
+            timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
+          });
+
+        } catch (err) {
+          console.warn("Skipping corrupted record");
+        }
+      }
+
+      setRecords(validRecords);
+
     } catch (err) {
-      console.error("DOCTOR FETCH ERROR:", err);
-      alert("Access denied or error");
+      console.error(err);
+      alert(err.reason || err.message);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Doctor Dashboard</h1>
+    <div style={{ padding: '20px' }}>
+      <h1>Doctor Dashboard</h1>
 
-      {/* Input */}
-      <div className="mt-6">
-        <input
-          type="text"
-          placeholder="Enter Patient Address"
-          value={patientAddress}
-          onChange={(e) => setPatientAddress(e.target.value)}
-          className="border p-2 mr-2 w-[400px]"
-        />
+      <p><b>Account:</b> {account}</p>
 
-        <button
-          onClick={fetchRecords}
-          className="bg-blue-600 text-white px-4 py-2"
-        >
-          View Records
-        </button>
-      </div>
+      <input
+        type="text"
+        placeholder="Patient Address"
+        value={patientAddress}
+        onChange={(e) => setPatientAddress(e.target.value)}
+        style={{ width: '400px' }}
+      />
 
-      {/* Records */}
-      <div className="mt-6">
-        <h2 className="text-xl font-semibold">Patient Records</h2>
+      <br /><br />
 
-        {records.length === 0 ? (
-          <p>No records found or no access</p>
-        ) : (
-          records.map((r, i) => (
-            <div key={i} className="border p-3 mt-2">
-              <p><b>IPFS:</b> {r.ipfsHash}</p>
-              <p><b>Uploaded By:</b> {r.uploadedBy}</p>
-              <p><b>Timestamp:</b> {Number(r.timestamp)}</p>
-            </div>
-          ))
-        )}
-      </div>
+      <button onClick={fetchRecords}>
+        {loading ? "Fetching..." : "Fetch Records"}
+      </button>
+
+      <hr />
+
+      {/* ✅ Empty state */}
+      {!loading && records.length === 0 && (
+        <p>No valid records found</p>
+      )}
+
+      {/* ✅ Clean records */}
+      {records.map((rec, i) => (
+        <div key={i} style={{ marginBottom: '25px' }}>
+          <p><b>File:</b> {rec.fileName}</p>
+          <p><b>Type:</b> {rec.fileType}</p>
+          <p><b>Uploaded By:</b> {rec.uploadedBy}</p>
+          <p><b>Time:</b> {rec.timestamp}</p>
+
+          {rec.fileType.startsWith("image") ? (
+            <img
+              src={getIPFSUrl(rec.hash)}
+              width="300"
+              alt="preview"
+            />
+          ) : (
+            <a href={getIPFSUrl(rec.hash)} target="_blank">
+              Open File
+            </a>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -26,10 +26,22 @@ const ABI = [
     "inputs": [
       { "indexed": true, "internalType": "address", "name": "patient", "type": "address" },
       { "indexed": false, "internalType": "string", "name": "ipfsHash", "type": "string" },
-      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" },
+      { "indexed": false, "internalType": "string", "name": "fileType", "type": "string" },
+      { "indexed": false, "internalType": "string", "name": "fileName", "type": "string" }
     ],
     "name": "RecordUploaded",
     "type": "event"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "patient", "type": "address" },
+      { "internalType": "address", "name": "doctor", "type": "address" }
+    ],
+    "name": "checkAccess",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [{ "internalType": "address", "name": "doctor", "type": "address" }],
@@ -48,7 +60,9 @@ const ABI = [
   {
     "inputs": [
       { "internalType": "address", "name": "patient", "type": "address" },
-      { "internalType": "string", "name": "ipfsHash", "type": "string" }
+      { "internalType": "string", "name": "ipfsHash", "type": "string" },
+      { "internalType": "string", "name": "fileType", "type": "string" },
+      { "internalType": "string", "name": "fileName", "type": "string" }
     ],
     "name": "uploadRecord",
     "outputs": [],
@@ -57,13 +71,15 @@ const ABI = [
   },
   {
     "inputs": [],
-    "name": "viewOwnRecords",
+    "name": "viewMyRecords",
     "outputs": [
       {
         "components": [
           { "internalType": "string", "name": "ipfsHash", "type": "string" },
           { "internalType": "uint256", "name": "timestamp", "type": "uint256" },
-          { "internalType": "address", "name": "uploadedBy", "type": "address" }
+          { "internalType": "address", "name": "uploadedBy", "type": "address" },
+          { "internalType": "string", "name": "fileType", "type": "string" },
+          { "internalType": "string", "name": "fileName", "type": "string" }
         ],
         "internalType": "struct MedicalRecord.Record[]",
         "name": "",
@@ -81,7 +97,9 @@ const ABI = [
         "components": [
           { "internalType": "string", "name": "ipfsHash", "type": "string" },
           { "internalType": "uint256", "name": "timestamp", "type": "uint256" },
-          { "internalType": "address", "name": "uploadedBy", "type": "address" }
+          { "internalType": "address", "name": "uploadedBy", "type": "address" },
+          { "internalType": "string", "name": "fileType", "type": "string" },
+          { "internalType": "string", "name": "fileName", "type": "string" }
         ],
         "internalType": "struct MedicalRecord.Record[]",
         "name": "",
@@ -93,6 +111,7 @@ const ABI = [
   }
 ];
 
+//  Contract getter
 export const getContract = async () => {
   const signer = await getSigner();
   return new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);

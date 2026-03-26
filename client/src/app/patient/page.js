@@ -1,138 +1,149 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { getContract } from "../../web3/contract";
-import { useWeb3 } from "../../context/Web3Context";
-import { uploadToIPFS } from "../../web3/ipfs";
-import { encryptData } from "../../web3/encryption";
+import { useState, useEffect } from 'react';
+import { getContract } from '../../web3/contract';
+import { encryptData } from '../../utils/encryption';
+import { uploadToIPFS } from '../../web3/ipfs';
 
 export default function PatientPage() {
-  const { account } = useWeb3();
-
-  const [records, setRecords] = useState([]);
+  const [account, setAccount] = useState(null);
   const [file, setFile] = useState(null);
-  const [doctorAddress, setDoctorAddress] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [doctorAddress, setDoctorAddress] = useState('');
 
-  // 🔍 Fetch records
-  const fetchRecords = async () => {
-    try {
-      const contract = await getContract();
-      const data = await contract.viewOwnRecords();
-      setRecords(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // 🚀 Upload file
-  const uploadRecord = async () => {
-    if (!file) return alert("Select file");
-
-    try {
-      setLoading(true);
-
-      // 🔐 Read file
-      const reader = new FileReader();
-
-      reader.onloadend = async () => {
-        const fileData = reader.result;
-
-        const encrypted = encryptData(fileData);
-
-        // Convert encrypted string → file
-        const blob = new Blob([encrypted], { type: "text/plain" });
-        const encryptedFile = new File([blob], "record.txt");
-
-        const hash = await uploadToIPFS(encryptedFile);
-
-        console.log("IPFS Hash:", hash);
-
-        // ⛓️ Store on blockchain
-        const contract = await getContract();
-
-        const tx = await contract.uploadRecord(account, hash);
-        await tx.wait();
-
-        alert("Encrypted record uploaded!");
-
-        fetchRecords();
-      };
-
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error(err);
-      alert("Upload failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 🔓 Grant access
-  const grantAccess = async () => {
-    const contract = await getContract();
-    const tx = await contract.grantAccess(doctorAddress);
-    await tx.wait();
-    alert("Access granted!");
-  };
+  const [uploading, setUploading] = useState(false);
+  const [granting, setGranting] = useState(false);
 
   useEffect(() => {
-    fetchRecords();
-  }, [account]);
+    if (!window.ethereum) return;
+
+    const handleAccountsChanged = (accounts) => {
+      setAccount(accounts[0]);
+    };
+
+    async function init() {
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts',
+      });
+      setAccount(accounts[0]);
+    }
+
+    init();
+
+    window.ethereum.on('accountsChanged', handleAccountsChanged);
+
+    return () => {
+      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+    };
+  }, []);
+
+  function handleFileChange(e) {
+    const selectedFile = e.target.files[0];
+    setFile(selectedFile);
+  }
+
+  async function uploadRecord() {
+    if (uploading) return;
+
+    if (!file) {
+      alert("Select a file");
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const contract = await getContract();
+
+      // ✅ STEP 1: Upload REAL file
+      const ipfsHash = await uploadToIPFS(file);
+
+      // ✅ STEP 2: Encrypt hash (optional)
+      const encryptedHash = encryptData(ipfsHash);
+
+      // ✅ STEP 3: Store on blockchain
+      const tx = await contract.uploadRecord(
+        account,
+        encryptedHash,
+        file.type,
+        file.name
+      );
+
+      await tx.wait();
+
+      alert("✅ Record uploaded successfully");
+
+      setFile(null);
+
+    } catch (err) {
+      console.error(err);
+      alert(err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function grantAccess() {
+    if (granting) return;
+
+    if (!doctorAddress) {
+      alert("Enter doctor address");
+      return;
+    }
+
+    try {
+      setGranting(true);
+
+      const contract = await getContract();
+
+      const tx = await contract.grantAccess(doctorAddress);
+      await tx.wait();
+
+      alert("✅ Access granted");
+      setDoctorAddress('');
+
+    } catch (err) {
+      console.error(err);
+      alert(err.message);
+    } finally {
+      setGranting(false);
+    }
+  }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Patient Dashboard</h1>
+    <div style={{ padding: '20px' }}>
+      <h1>Patient Dashboard</h1>
 
-      {/* File Upload */}
-      <div className="mt-6">
-        <input
-          type="file"
-          onChange={(e) => setFile(e.target.files[0])}
-        />
+      <p><b>Account:</b> {account}</p>
 
-        <button
-          onClick={uploadRecord}
-          className="bg-green-600 text-white px-4 py-2 ml-2"
-        >
-          {loading ? "Uploading..." : "Upload File"}
-        </button>
-      </div>
+      <hr />
 
-      {/* Access */}
-      <div className="mt-6">
-        <input
-          placeholder="Doctor Address"
-          value={doctorAddress}
-          onChange={(e) => setDoctorAddress(e.target.value)}
-          className="border p-2 mr-2 w-[400px]"
-        />
+      <h2>Upload Medical Record</h2>
 
-        <button
-          onClick={grantAccess}
-          className="bg-blue-600 text-white px-4 py-2"
-        >
-          Grant Access
-        </button>
-      </div>
+      <input type="file" onChange={handleFileChange} />
 
-      {/* Records */}
-      <div className="mt-6">
-        <h2>Your Records</h2>
+      <br /><br />
 
-        {records.map((r, i) => (
-          <div key={i} className="border p-2 mt-2">
-            <p>Hash: {r.ipfsHash}</p>
+      <button onClick={uploadRecord}>
+        {uploading ? "Uploading..." : "Upload Record"}
+      </button>
 
-            <a
-              href={`https://ipfs.io/ipfs/${r.ipfsHash}`}
-              target="_blank"
-            >
-              View File
-            </a>
-          </div>
-        ))}
-      </div>
+      <hr />
+
+      <h2>Grant Doctor Access</h2>
+
+      <input
+        type="text"
+        placeholder="Doctor Address"
+        value={doctorAddress}
+        onChange={(e) => setDoctorAddress(e.target.value)}
+        style={{ width: '400px' }}
+      />
+
+      <br /><br />
+
+      <button onClick={grantAccess}>
+        {granting ? "Processing..." : "Grant Access"}
+      </button>
     </div>
   );
 }
