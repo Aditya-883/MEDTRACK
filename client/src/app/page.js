@@ -1,43 +1,37 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-import { useWeb3 } from "../context/Web3Context";
+import Link from 'next/link';
 
 export default function Home() {
-  const router = useRouter();
-  const { account, role } = useWeb3();
-
-  const handleRoute = (type) => {
-    if (!account) {
-      alert("Connect wallet first");
-      return;
-    }
-
-    if (role !== type) {
-      alert(`You are not a ${type}`);
-      return;
-    }
-
-    router.push(`/${type}`);
-  };
-  console.log("Account:", account);
-  console.log("Role:", role);
-
   return (
-    <div className="flex flex-col items-center mt-20 gap-6">
-      <h1 className="text-3xl font-bold">MedTrack</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
 
-      <button onClick={() => handleRoute("patient")}>
-        Patient
-      </button>
+      <div className="bg-white p-10 rounded-xl shadow-md text-center w-[350px]">
 
-      <button onClick={() => handleRoute("doctor")}>
-        Doctor
-      </button>
+        <h1 className="text-3xl font-bold mb-6">🏥 MedTrack</h1>
 
-      <button onClick={() => handleRoute("admin")}>
-        Admin
-      </button>
+        <div className="flex flex-col gap-4">
+
+          <Link href="/patient">
+            <button className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">
+              Patient
+            </button>
+          </Link>
+
+          <Link href="/doctor">
+            <button className="w-full bg-green-500 text-white py-2 rounded hover:bg-green-600">
+              Doctor
+            </button>
+          </Link>
+
+          <Link href="/admin">
+            <button className="w-full bg-purple-500 text-white py-2 rounded hover:bg-purple-600">
+              Admin
+            </button>
+          </Link>
+
+        </div>
+
+      </div>
+
     </div>
   );
 }
