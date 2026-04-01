@@ -11,7 +11,10 @@ contract MedicalRecord {
     }
 
     mapping(address => Record[]) private patientRecords;
+
     mapping(address => mapping(address => bool)) private doctorAccess;
+
+    mapping(address => address[]) private authorizedDoctors;
 
     event RecordUploaded(
         address indexed patient,
@@ -66,6 +69,10 @@ contract MedicalRecord {
     function grantAccess(address doctor) public {
         require(doctor != address(0), "Invalid doctor address");
 
+        if (!doctorAccess[msg.sender][doctor]) {
+            authorizedDoctors[msg.sender].push(doctor);
+        }
+
         doctorAccess[msg.sender][doctor] = true;
 
         emit AccessGranted(msg.sender, doctor);
@@ -83,17 +90,20 @@ contract MedicalRecord {
         return patientRecords[patient];
     }
 
-    //  VIEW OWN RECORDS
     function viewMyRecords() public view returns (Record[] memory) {
         return patientRecords[msg.sender];
     }
-
-    //  DEBUG HELPER
 
     function checkAccess(
         address patient,
         address doctor
     ) public view returns (bool) {
         return doctorAccess[patient][doctor];
+    }
+
+    function getAuthorizedDoctors(
+        address patient
+    ) public view returns (address[] memory) {
+        return authorizedDoctors[patient];
     }
 }

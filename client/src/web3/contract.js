@@ -1,6 +1,5 @@
 import { ethers } from "ethers";
 import { CONTRACT_ADDRESS } from "./config";
-import { getSigner } from "./provider";
 
 const ABI = [
   {
@@ -40,6 +39,17 @@ const ABI = [
     ],
     "name": "checkAccess",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "patient", "type": "address" }
+    ],
+    "name": "getAuthorizedDoctors",
+    "outputs": [
+      { "internalType": "address[]", "name": "", "type": "address[]" }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
@@ -111,8 +121,19 @@ const ABI = [
   }
 ];
 
+//  Provider
+export const getProvider = () => {
+  return new ethers.BrowserProvider(window.ethereum);
+};
+
+//  Signer
+export const getSigner = async () => {
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  return await provider.getSigner();
+};
+
 //  Contract getter
-export const getContract = async () => {
+export const getContract = async (write = false) => {
   const signer = await getSigner();
   return new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 };
