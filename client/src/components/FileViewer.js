@@ -5,16 +5,54 @@ import { useState } from 'react';
 export default function FileViewer({ url, fileType }) {
   const [open, setOpen] = useState(false);
 
-  // IMAGE VIEW
+  // ✅ FIXED DOWNLOAD (FORCE DOWNLOAD)
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = 'medical_record';
+      document.body.appendChild(link);
+      link.click();
+
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error(err);
+      alert("Download failed");
+    }
+  };
+
+  // 🖼️ IMAGE VIEW
   if (fileType.startsWith("image")) {
     return (
-      <div>
+      <div className="mt-3">
         <img
           src={url}
-          className="mt-2 w-64 rounded cursor-pointer hover:scale-105 transition"
+          className="w-64 rounded cursor-pointer hover:scale-105 transition shadow"
           alt="preview"
           onClick={() => setOpen(true)}
         />
+
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => setOpen(true)}
+            className="bg-blue-500 text-white px-3 py-1 rounded text-sm"
+          >
+            View
+          </button>
+
+          <button
+            onClick={handleDownload}
+            className="bg-gray-800 text-white px-3 py-1 rounded text-sm"
+          >
+            Download
+          </button>
+        </div>
 
         {open && (
           <div
@@ -23,7 +61,7 @@ export default function FileViewer({ url, fileType }) {
           >
             <img
               src={url}
-              className="max-h-[90%] max-w-[90%] rounded"
+              className="max-h-[90%] max-w-[90%] rounded shadow-lg"
               alt="full"
             />
           </div>
@@ -32,35 +70,52 @@ export default function FileViewer({ url, fileType }) {
     );
   }
 
-  // PDF VIEW
+  // 📄 PDF VIEW
   if (fileType === "application/pdf") {
     return (
       <div className="mt-3">
-        <button
-          onClick={() => setOpen(!open)}
-          className="bg-gray-800 text-white px-3 py-1 rounded"
-        >
-          {open ? "Hide PDF" : "View PDF"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setOpen(!open)}
+            className="bg-gray-800 text-white px-3 py-1 rounded text-sm"
+          >
+            {open ? "Hide PDF" : "View PDF"}
+          </button>
+
+          <button
+            onClick={handleDownload}
+            className="bg-blue-500 text-white px-3 py-1 rounded text-sm"
+          >
+            Download
+          </button>
+        </div>
 
         {open && (
           <iframe
             src={url}
-            className="w-full h-[500px] mt-3 border rounded"
+            className="w-full h-[500px] mt-3 border rounded shadow"
           />
         )}
       </div>
     );
   }
 
-  // DEFAULT FILE
+  // 📁 DEFAULT
   return (
-    <a
-      href={url}
-      target="_blank"
-      className="text-blue-500 underline mt-2 inline-block"
-    >
-      Open File
-    </a>
+    <div className="mt-3 flex gap-2">
+      <button
+        onClick={() => window.open(url, '_blank')}
+        className="bg-gray-700 text-white px-3 py-1 rounded text-sm"
+      >
+        Open File
+      </button>
+
+      <button
+        onClick={handleDownload}
+        className="bg-blue-500 text-white px-3 py-1 rounded text-sm"
+      >
+        Download
+      </button>
+    </div>
   );
 }
