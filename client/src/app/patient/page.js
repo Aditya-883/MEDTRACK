@@ -9,6 +9,8 @@ import FileViewer from '../../components/FileViewer';
 import { checkUserRole } from '../../lib/auth';
 import { clearSession } from '../../lib/session';
 
+const BASE_URL = "http://localhost:5000/api";
+
 export default function PatientPage() {
   const [account, setAccount] = useState(null);
   const [file, setFile] = useState(null);
@@ -20,7 +22,6 @@ export default function PatientPage() {
   const [doctorList, setDoctorList] = useState([]);
   const [uploading, setUploading] = useState(false);
 
-  // 🔥 PAGINATION
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 5;
 
@@ -45,13 +46,39 @@ export default function PatientPage() {
       return;
     }
 
-    const user = await checkUserRole(currentAccount);
+    let user = await checkUserRole(currentAccount);
 
-    if (!user || user.role !== 'patient') {
+    // 🔥 CASE 1: NEW USER → AUTO CREATE AS PATIENT
+    if (!user) {
+      try {
+        const res = await fetch(`${BASE_URL}/users/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: currentAccount,
+            role: "patient"
+          })
+        });
+
+        if (!res.ok) throw new Error("Registration failed");
+
+        user = await res.json();
+        console.log("✅ New patient created");
+
+      } catch (err) {
+        console.error(err);
+        setAuthorized(false);
+        return;
+      }
+    }
+
+    // 🔥 CASE 2: EXISTING USER BUT NOT PATIENT → BLOCK
+    if (user.role !== 'patient') {
       setAuthorized(false);
       return;
     }
 
+    // ✅ CASE 3: VALID PATIENT
     setAuthorized(true);
 
     await fetchMyRecords();
@@ -78,8 +105,26 @@ export default function PatientPage() {
     }
   }
 
+  // 🔥 PREMIUM UNAUTHORIZED UI (UNCHANGED)
   if (authorized === false) {
-    return <div className="p-6">Unauthorized</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="bg-white p-6 rounded shadow text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-2">
+            Unauthorized Access
+          </h2>
+          <p className="text-gray-600 mb-4">
+            This wallet is not allowed on Patient Panel
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-500 text-white px-4 py-2 rounded"
+          >
+            Reload
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (authorized === null) return null;
@@ -157,7 +202,7 @@ export default function PatientPage() {
       }));
 
       setRecords(formatted);
-      setCurrentPage(1); // reset page
+      setCurrentPage(1);
 
     } catch (err) {
       console.error(err);
@@ -194,18 +239,15 @@ export default function PatientPage() {
   const totalRecords = records.length;
   const activeDoctors = doctorList.length;
 
-  // 🔥 PAGINATION LOGIC
   const indexOfLast = currentPage * recordsPerPage;
   const indexOfFirst = indexOfLast - recordsPerPage;
   const currentRecords = records.slice(indexOfFirst, indexOfLast);
-
   const totalPages = Math.ceil(records.length / recordsPerPage);
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow">
 
-        {/* HEADER */}
         <div className="flex justify-between mb-6">
           <h1 className="text-2xl font-bold">Patient Dashboard</h1>
           <button
@@ -216,7 +258,6 @@ export default function PatientPage() {
           </button>
         </div>
 
-        {/* ACCOUNT */}
         <div className="flex justify-between mb-4">
           <p><b>Connected:</b> {account}</p>
           <button onClick={copyAddress} className="bg-gray-200 px-2 py-1 rounded text-xs">
@@ -224,7 +265,6 @@ export default function PatientPage() {
           </button>
         </div>
 
-        {/* STATS */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="bg-blue-100 p-4 rounded">
             <p>Total Records</p>
@@ -236,7 +276,6 @@ export default function PatientPage() {
           </div>
         </div>
 
-        {/* DOCTORS */}
         <h2 className="font-semibold mb-2">Authorized Doctors</h2>
 
         {doctorList.length === 0 ? (
@@ -245,7 +284,6 @@ export default function PatientPage() {
           doctorList.map((doc, i) => (
             <div key={i} className="flex justify-between items-center border p-2 rounded mb-2">
               <span className="text-sm">{doc.address}</span>
-
               <button
                 onClick={() => revokeDoctor(doc.address)}
                 className="bg-red-500 text-white px-2 py-1 rounded text-xs"
@@ -256,7 +294,6 @@ export default function PatientPage() {
           ))
         )}
 
-        {/* UPLOAD */}
         <h2 className="font-semibold mt-6 mb-2">Upload New Record</h2>
 
         <div className="flex gap-2 mb-4">
@@ -272,7 +309,6 @@ export default function PatientPage() {
 
         {message && <p className="text-sm text-gray-600">{message}</p>}
 
-        {/* ACCESS */}
         <h2 className="font-semibold mt-6 mb-2">Add Doctor</h2>
 
         <input
@@ -290,7 +326,6 @@ export default function PatientPage() {
           Grant Access
         </button>
 
-        {/* RECORDS */}
         <h2 className="font-semibold mt-6 mb-2">Your Records</h2>
 
         {records.length === 0 ? (
@@ -309,7 +344,6 @@ export default function PatientPage() {
               </div>
             ))}
 
-            {/* PAGINATION */}
             <div className="flex justify-between mt-4">
               <button
                 disabled={currentPage === 1}
