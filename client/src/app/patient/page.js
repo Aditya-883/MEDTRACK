@@ -2,58 +2,98 @@
 
 import { useState, useEffect } from 'react';
 import { getContract } from '../../web3/contract';
-import { encryptData } from '../../utils/encryption';
+import { encryptData, decryptData } from '../../utils/encryption';
 import { uploadToIPFS } from '../../web3/ipfs';
-import { decryptData } from '../../utils/encryption';
-import RoleGuard from '../../components/RoleGuard';
-import FileViewer from '../../components/FileViewer';
 import { getIPFSUrl } from '../../utils/ipfsGateway';
+import FileViewer from '../../components/FileViewer';
+import { checkUserRole } from '../../lib/auth';
+import { clearSession } from '../../lib/session';
 
-function PatientPage() {
+export default function PatientPage() {
   const [account, setAccount] = useState(null);
   const [file, setFile] = useState(null);
   const [doctorAddress, setDoctorAddress] = useState('');
-
   const [records, setRecords] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [granting, setGranting] = useState(false);
-  const [loadingRecords, setLoadingRecords] = useState(false);
   const [message, setMessage] = useState('');
+  const [authorized, setAuthorized] = useState(null);
+
+  const [doctorList, setDoctorList] = useState([]);
+  const [uploading, setUploading] = useState(false);
+
+  // 🔥 PAGINATION
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 5;
 
   useEffect(() => {
-    if (!window.ethereum) return;
-
-    async function init() {
-      const accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      });
-      setAccount(accounts[0]);
-    }
-
     init();
+
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', () => {
+        window.location.reload();
+      });
+    }
   }, []);
 
-  // ========================
-  // FILE VALIDATION
-  // ========================
-  function validateFile(file) {
-    const allowed = [
-      "application/pdf",
-      "image/png",
-      "image/jpeg",
-      "image/jpg"
-    ];
+  async function init() {
+    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
 
+    const currentAccount = accounts[0];
+    setAccount(currentAccount);
+
+    if (!currentAccount) {
+      setAuthorized(false);
+      return;
+    }
+
+    const user = await checkUserRole(currentAccount);
+
+    if (!user || user.role !== 'patient') {
+      setAuthorized(false);
+      return;
+    }
+
+    setAuthorized(true);
+
+    await fetchMyRecords();
+    await fetchDoctorAccessList();
+  }
+
+  async function fetchDoctorAccessList() {
+    try {
+      const contract = await getContract(false);
+      const doctors = await contract.getAuthorizedDoctors(account);
+
+      const list = [];
+
+      for (let doc of doctors) {
+        const status = await contract.checkAccess(account, doc);
+        if (status) {
+          list.push({ address: doc, active: status });
+        }
+      }
+
+      setDoctorList(list);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  if (authorized === false) {
+    return <div className="p-6">Unauthorized</div>;
+  }
+
+  if (authorized === null) return null;
+
+  function validateFile(file) {
+    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
     if (!allowed.includes(file.type)) {
       alert("Only PDF/Image allowed");
       return false;
     }
-
     if (file.size > 10 * 1024 * 1024) {
       alert("Max size 10MB");
       return false;
     }
-
     return true;
   }
 
@@ -70,18 +110,14 @@ function PatientPage() {
     setMessage(`Selected: ${f.name}`);
   }
 
-  // ========================
-  // UPLOAD
-  // ========================
   async function uploadRecord() {
     if (!file) return alert("Select file");
 
     try {
       setUploading(true);
-      setMessage("Uploading to IPFS...");
+      setMessage("Uploading...");
 
-      const contract = await getContract();
-
+      const contract = await getContract(true);
       const ipfsHash = await uploadToIPFS(file);
       const encryptedHash = encryptData(ipfsHash);
 
@@ -97,7 +133,7 @@ function PatientPage() {
       setMessage("✅ Uploaded successfully");
       setFile(null);
 
-      fetchMyRecords(); // auto refresh
+      await fetchMyRecords();
 
     } catch (err) {
       console.error(err);
@@ -107,176 +143,198 @@ function PatientPage() {
     }
   }
 
-  // ========================
-  // FETCH OWN RECORDS
-  // ========================
   async function fetchMyRecords() {
     try {
-      setLoadingRecords(true);
+      const contract = await getContract(false);
 
-      const contract = await getContract();
       const data = await contract.viewMyRecords();
 
-      const formatted = [];
-
-      for (let r of data) {
-        try {
-          const hash = decryptData(r.ipfsHash);
-
-          formatted.push({
-            hash,
-            fileType: r.fileType,
-            fileName: r.fileName,
-            timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
-          });
-
-        } catch {}
-      }
+      const formatted = data.map(r => ({
+        hash: decryptData(r.ipfsHash),
+        fileType: r.fileType,
+        fileName: r.fileName,
+        timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
+      }));
 
       setRecords(formatted);
+      setCurrentPage(1); // reset page
 
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoadingRecords(false);
     }
   }
 
-  // ========================
-  // GRANT / REVOKE
-  // ========================
   async function grantAccess() {
-    if (!doctorAddress) return alert("Enter doctor");
+    if (!doctorAddress) return alert("Enter doctor address");
 
-    try {
-      setGranting(true);
-      setMessage("Granting access...");
+    const already = doctorList.find(d => d.address === doctorAddress);
+    if (already) return alert("Already has access");
 
-      const contract = await getContract();
-      const tx = await contract.grantAccess(doctorAddress);
+    const contract = await getContract(true);
+    const tx = await contract.grantAccess(doctorAddress);
+    await tx.wait();
 
-      await tx.wait();
-
-      setDoctorAddress('');
-      setMessage("✅ Access granted");
-
-    } catch (err) {
-      console.error(err);
-      setMessage("❌ Failed");
-    } finally {
-      setGranting(false);
-    }
+    await fetchDoctorAccessList();
+    alert("Access granted");
   }
 
-  async function revokeAccess() {
-    if (!doctorAddress) return alert("Enter doctor");
+  async function revokeDoctor(address) {
+    const contract = await getContract(true);
+    const tx = await contract.revokeAccess(address);
+    await tx.wait();
 
-    try {
-      const contract = await getContract();
-      const tx = await contract.revokeAccess(doctorAddress);
-
-      await tx.wait();
-
-      setMessage("❌ Access revoked");
-
-    } catch (err) {
-      console.error(err);
-    }
+    await fetchDoctorAccessList();
   }
 
-  // ========================
-  // UI
-  // ========================
+  function copyAddress() {
+    navigator.clipboard.writeText(account);
+    alert("Copied!");
+  }
+
+  const totalRecords = records.length;
+  const activeDoctors = doctorList.length;
+
+  // 🔥 PAGINATION LOGIC
+  const indexOfLast = currentPage * recordsPerPage;
+  const indexOfFirst = indexOfLast - recordsPerPage;
+  const currentRecords = records.slice(indexOfFirst, indexOfLast);
+
+  const totalPages = Math.ceil(records.length / recordsPerPage);
+
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow">
+      <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow">
 
-        <h1 className="text-2xl font-bold mb-3">Patient Dashboard</h1>
-        <p className="text-sm text-gray-600 mb-4">
-          <b>Account:</b> {account}
-        </p>
+        {/* HEADER */}
+        <div className="flex justify-between mb-6">
+          <h1 className="text-2xl font-bold">Patient Dashboard</h1>
+          <button
+            onClick={() => { clearSession(); window.location.reload(); }}
+            className="bg-red-100 text-red-600 px-3 py-1 rounded"
+          >
+            Logout
+          </button>
+        </div>
 
-        {/* Upload */}
-        <h2 className="font-semibold mb-2">Upload Record</h2>
+        {/* ACCOUNT */}
+        <div className="flex justify-between mb-4">
+          <p><b>Connected:</b> {account}</p>
+          <button onClick={copyAddress} className="bg-gray-200 px-2 py-1 rounded text-xs">
+            Copy
+          </button>
+        </div>
 
-        <input type="file" onChange={handleFileChange} />
+        {/* STATS */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-blue-100 p-4 rounded">
+            <p>Total Records</p>
+            <p className="text-xl font-bold">{totalRecords}</p>
+          </div>
+          <div className="bg-green-100 p-4 rounded">
+            <p>Active Doctors</p>
+            <p className="text-xl font-bold">{activeDoctors}</p>
+          </div>
+        </div>
 
-        <button
-          onClick={uploadRecord}
-          disabled={uploading}
-          className="ml-2 bg-blue-500 text-white px-4 py-1 rounded"
-        >
-          {uploading ? "Uploading..." : "Upload"}
-        </button>
+        {/* DOCTORS */}
+        <h2 className="font-semibold mb-2">Authorized Doctors</h2>
 
-        {message && <p className="mt-2 text-sm">{message}</p>}
+        {doctorList.length === 0 ? (
+          <p className="text-gray-400 mb-4">No doctors added yet</p>
+        ) : (
+          doctorList.map((doc, i) => (
+            <div key={i} className="flex justify-between items-center border p-2 rounded mb-2">
+              <span className="text-sm">{doc.address}</span>
 
-        <hr className="my-5" />
+              <button
+                onClick={() => revokeDoctor(doc.address)}
+                className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+              >
+                Revoke
+              </button>
+            </div>
+          ))
+        )}
 
-        {/* Access */}
-        <h2 className="font-semibold mb-2">Manage Access</h2>
+        {/* UPLOAD */}
+        <h2 className="font-semibold mt-6 mb-2">Upload New Record</h2>
+
+        <div className="flex gap-2 mb-4">
+          <input type="file" onChange={handleFileChange} />
+          <button
+            onClick={uploadRecord}
+            disabled={uploading}
+            className="bg-blue-500 text-white px-4 py-1 rounded"
+          >
+            {uploading ? "Uploading..." : "Upload"}
+          </button>
+        </div>
+
+        {message && <p className="text-sm text-gray-600">{message}</p>}
+
+        {/* ACCESS */}
+        <h2 className="font-semibold mt-6 mb-2">Add Doctor</h2>
 
         <input
           type="text"
-          placeholder="Doctor address"
+          placeholder="Doctor Wallet Address"
           value={doctorAddress}
           onChange={(e) => setDoctorAddress(e.target.value)}
           className="border p-2 rounded w-full mb-2"
         />
 
-        <div className="flex gap-2">
-          <button
-            onClick={grantAccess}
-            className="bg-green-500 text-white px-4 py-1 rounded"
-          >
-            Grant
-          </button>
-
-          <button
-            onClick={revokeAccess}
-            className="bg-red-500 text-white px-4 py-1 rounded"
-          >
-            Revoke
-          </button>
-        </div>
-
-        <hr className="my-5" />
-
-        {/* Records */}
-        <h2 className="font-semibold mb-2">My Records</h2>
-
         <button
-          onClick={fetchMyRecords}
-          className="bg-gray-800 text-white px-3 py-1 rounded mb-3"
+          onClick={grantAccess}
+          className="bg-green-500 text-white px-4 py-1 rounded mb-4"
         >
-          {loadingRecords ? "Loading..." : "Load Records"}
+          Grant Access
         </button>
 
-        <div className="space-y-4">
-          {records.map((rec, i) => (
-            <div key={i} className="border p-3 rounded bg-gray-50">
+        {/* RECORDS */}
+        <h2 className="font-semibold mt-6 mb-2">Your Records</h2>
 
-              <p><b>{rec.fileName}</b></p>
-              <p className="text-sm text-gray-600">{rec.timestamp}</p>
+        {records.length === 0 ? (
+          <p className="text-gray-400">No records yet</p>
+        ) : (
+          <>
+            {currentRecords.map((rec, i) => (
+              <div key={i} className="border p-4 rounded bg-gray-50 mb-3">
+                <p className="font-semibold">{rec.fileName}</p>
+                <p className="text-xs text-gray-500 mb-2">{rec.timestamp}</p>
 
-              <FileViewer
-                url={getIPFSUrl(rec.hash)}
-                fileType={rec.fileType}
-              />
+                <FileViewer
+                  url={getIPFSUrl(rec.hash)}
+                  fileType={rec.fileType}
+                />
+              </div>
+            ))}
 
+            {/* PAGINATION */}
+            <div className="flex justify-between mt-4">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => prev - 1)}
+                className="bg-gray-300 px-3 py-1 rounded disabled:opacity-50"
+              >
+                Prev
+              </button>
+
+              <span className="text-sm">
+                Page {currentPage} / {totalPages || 1}
+              </span>
+
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                className="bg-gray-300 px-3 py-1 rounded disabled:opacity-50"
+              >
+                Next
+              </button>
             </div>
-          ))}
-        </div>
+          </>
+        )}
 
       </div>
     </div>
-  );
-}
-
-export default function PatientWrapper() {
-  return (
-    <RoleGuard allowedRole="patient">
-      <PatientPage />
-    </RoleGuard>
   );
 }
