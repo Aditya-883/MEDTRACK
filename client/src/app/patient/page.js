@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { getContract } from '../../web3/contract';
-import { encryptData, decryptData } from '../../utils/encryption';
+import { encryptData } from '../../utils/encryption';
 import { uploadToIPFS } from '../../web3/ipfs';
-import { getIPFSUrl } from '../../utils/ipfsGateway';
-import FileViewer from '../../components/FileViewer';
 import { checkUserRole } from '../../lib/auth';
 import { clearSession } from '../../lib/session';
 
@@ -18,12 +16,8 @@ export default function PatientPage() {
   const [records, setRecords] = useState([]);
   const [message, setMessage] = useState('');
   const [authorized, setAuthorized] = useState(null);
-
   const [doctorList, setDoctorList] = useState([]);
   const [uploading, setUploading] = useState(false);
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const recordsPerPage = 5;
 
   useEffect(() => {
     init();
@@ -36,53 +30,45 @@ export default function PatientPage() {
   }, []);
 
   async function init() {
-    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      const currentAccount = accounts[0];
+      setAccount(currentAccount);
 
-    const currentAccount = accounts[0];
-    setAccount(currentAccount);
+      if (!currentAccount) return setAuthorized(false);
 
-    if (!currentAccount) {
-      setAuthorized(false);
-      return;
-    }
+      let user = await checkUserRole(currentAccount);
 
-    let user = await checkUserRole(currentAccount);
+      if (!user) {
+        try {
+          const res = await fetch(`${BASE_URL}/users/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              address: currentAccount,
+              role: "patient"
+            })
+          });
 
-    // 🔥 CASE 1: NEW USER → AUTO CREATE AS PATIENT
-    if (!user) {
-      try {
-        const res = await fetch(`${BASE_URL}/users/register`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            address: currentAccount,
-            role: "patient"
-          })
-        });
+          if (!res.ok) throw new Error();
+          user = await res.json();
 
-        if (!res.ok) throw new Error("Registration failed");
-
-        user = await res.json();
-        console.log("✅ New patient created");
-
-      } catch (err) {
-        console.error(err);
-        setAuthorized(false);
-        return;
+        } catch {
+          return setAuthorized(false);
+        }
       }
-    }
 
-    // 🔥 CASE 2: EXISTING USER BUT NOT PATIENT → BLOCK
-    if (user.role !== 'patient') {
+      if (user.role !== 'patient') return setAuthorized(false);
+
+      setAuthorized(true);
+
+      await fetchMyRecords();
+      await fetchDoctorAccessList();
+
+    } catch (err) {
+      console.error("Init error:", err);
       setAuthorized(false);
-      return;
     }
-
-    // ✅ CASE 3: VALID PATIENT
-    setAuthorized(true);
-
-    await fetchMyRecords();
-    await fetchDoctorAccessList();
   }
 
   async function fetchDoctorAccessList() {
@@ -91,52 +77,51 @@ export default function PatientPage() {
       const doctors = await contract.getAuthorizedDoctors(account);
 
       const list = [];
-
       for (let doc of doctors) {
         const status = await contract.checkAccess(account, doc);
-        if (status) {
-          list.push({ address: doc, active: status });
-        }
+        if (status) list.push({ address: doc });
       }
 
       setDoctorList(list);
-    } catch (err) {
-      console.error(err);
+
+    } catch {
+      setDoctorList([]);
     }
   }
 
-  // 🔥 PREMIUM UNAUTHORIZED UI (UNCHANGED)
-  if (authorized === false) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="bg-white p-6 rounded shadow text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-2">
-            Unauthorized Access
-          </h2>
-          <p className="text-gray-600 mb-4">
-            This wallet is not allowed on Patient Panel
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-blue-500 text-white px-4 py-2 rounded"
-          >
-            Reload
-          </button>
-        </div>
-      </div>
-    );
+  async function fetchMyRecords() {
+    try {
+      const contract = await getContract(false);
+
+      let data;
+
+      try {
+        data = await contract.viewMyRecords();
+      } catch {
+        setRecords([]);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setRecords([]);
+        return;
+      }
+
+      setRecords(data);
+
+    } catch {
+      setRecords([]);
+    }
   }
 
-  if (authorized === null) return null;
-
   function validateFile(file) {
-    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
+    const allowed = ["application/pdf", "image/png", "image/jpeg"];
     if (!allowed.includes(file.type)) {
       alert("Only PDF/Image allowed");
       return false;
     }
     if (file.size > 10 * 1024 * 1024) {
-      alert("Max size 10MB");
+      alert("Max 10MB");
       return false;
     }
     return true;
@@ -144,25 +129,21 @@ export default function PatientPage() {
 
   function handleFileChange(e) {
     const f = e.target.files[0];
-    if (!f) return;
-
-    if (!validateFile(f)) {
-      e.target.value = null;
-      return;
-    }
+    if (!f || !validateFile(f)) return;
 
     setFile(f);
     setMessage(`Selected: ${f.name}`);
   }
 
   async function uploadRecord() {
-    if (!file) return alert("Select file");
+    if (!file) return;
 
     try {
       setUploading(true);
       setMessage("Uploading...");
 
       const contract = await getContract(true);
+
       const ipfsHash = await uploadToIPFS(file);
       const encryptedHash = encryptData(ipfsHash);
 
@@ -178,115 +159,106 @@ export default function PatientPage() {
       setMessage("✅ Uploaded successfully");
       setFile(null);
 
-      await fetchMyRecords();
-
-    } catch (err) {
-      console.error(err);
+    } catch {
       setMessage("❌ Upload failed");
     } finally {
       setUploading(false);
     }
   }
 
-  async function fetchMyRecords() {
+  async function grantAccess() {
+    if (!doctorAddress) return;
+
     try {
-      const contract = await getContract(false);
+      const contract = await getContract(true);
+      const tx = await contract.grantAccess(doctorAddress);
+      await tx.wait();
 
-      const data = await contract.viewMyRecords();
+      setDoctorAddress('');
+      await fetchDoctorAccessList();
 
-      const formatted = data.map(r => ({
-        hash: decryptData(r.ipfsHash),
-        fileType: r.fileType,
-        fileName: r.fileName,
-        timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
-      }));
-
-      setRecords(formatted);
-      setCurrentPage(1);
-
-    } catch (err) {
-      console.error(err);
+    } catch {
+      alert("Grant failed");
     }
   }
 
-  async function grantAccess() {
-    if (!doctorAddress) return alert("Enter doctor address");
-
-    const already = doctorList.find(d => d.address === doctorAddress);
-    if (already) return alert("Already has access");
-
-    const contract = await getContract(true);
-    const tx = await contract.grantAccess(doctorAddress);
-    await tx.wait();
-
-    await fetchDoctorAccessList();
-    alert("Access granted");
-  }
-
   async function revokeDoctor(address) {
-    const contract = await getContract(true);
-    const tx = await contract.revokeAccess(address);
-    await tx.wait();
+    try {
+      const contract = await getContract(true);
+      const tx = await contract.revokeAccess(address);
+      await tx.wait();
 
-    await fetchDoctorAccessList();
+      await fetchDoctorAccessList();
+
+    } catch {
+      alert("Revoke failed");
+    }
   }
 
-  function copyAddress() {
-    navigator.clipboard.writeText(account);
-    alert("Copied!");
+  if (authorized === false) {
+    return <div className="text-center mt-20 text-red-500">Unauthorized</div>;
   }
 
-  const totalRecords = records.length;
-  const activeDoctors = doctorList.length;
-
-  const indexOfLast = currentPage * recordsPerPage;
-  const indexOfFirst = indexOfLast - recordsPerPage;
-  const currentRecords = records.slice(indexOfFirst, indexOfLast);
-  const totalPages = Math.ceil(records.length / recordsPerPage);
+  if (authorized === null) return null;
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-teal-100 dark:from-gray-900 dark:to-gray-800 p-6">
 
+      <div className="flex-grow max-w-4xl mx-auto bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl shadow-xl">
+
+        {/* HEADER */}
         <div className="flex justify-between mb-6">
-          <h1 className="text-2xl font-bold">Patient Dashboard</h1>
+          <h1 className="text-3xl font-bold dark:text-white">
+            Patient Dashboard
+          </h1>
+
           <button
-            onClick={() => { clearSession(); window.location.reload(); }}
-            className="bg-red-100 text-red-600 px-3 py-1 rounded"
+            onClick={() => { clearSession(); location.reload(); }}
+            className="text-red-500"
           >
             Logout
           </button>
         </div>
 
-        <div className="flex justify-between mb-4">
-          <p><b>Connected:</b> {account}</p>
-          <button onClick={copyAddress} className="bg-gray-200 px-2 py-1 rounded text-xs">
-            Copy
-          </button>
+        {/* WALLET */}
+        <div className="bg-blue-600 text-white p-4 rounded mb-6">
+          <p className="text-sm opacity-80">Connected Wallet</p>
+          <p className="font-semibold break-all">{account}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-blue-100 p-4 rounded">
-            <p>Total Records</p>
-            <p className="text-xl font-bold">{totalRecords}</p>
-          </div>
-          <div className="bg-green-100 p-4 rounded">
-            <p>Active Doctors</p>
-            <p className="text-xl font-bold">{activeDoctors}</p>
-          </div>
+        {/* ABOUT */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow mb-6">
+          <h2 className="font-semibold mb-2 dark:text-white">
+            About Patient Panel
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Manage your medical records securely using blockchain.
+            Grant and revoke doctor access anytime with full control.
+          </p>
         </div>
 
-        <h2 className="font-semibold mb-2">Authorized Doctors</h2>
+        {/* HEALTH TIPS */}
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-4 rounded-xl mb-6 shadow">
+          <h2 className="font-semibold mb-2">Health Tips</h2>
+          <ul className="text-sm list-disc ml-4">
+            <li>Stay hydrated 💧</li>
+            <li>Regular checkups 🏥</li>
+            <li>Balanced diet 🥗</li>
+          </ul>
+        </div>
+
+        {/* DOCTORS */}
+        <h2 className="font-semibold mb-2 dark:text-white">Doctors Access</h2>
 
         {doctorList.length === 0 ? (
-          <p className="text-gray-400 mb-4">No doctors added yet</p>
+          <p className="text-gray-400 mb-4">No doctors added</p>
         ) : (
           doctorList.map((doc, i) => (
-            <div key={i} className="flex justify-between items-center border p-2 rounded mb-2">
-              <span className="text-sm">{doc.address}</span>
+            <div key={i} className="flex justify-between bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2">
+              <span>{doc.address}</span>
               <button
                 onClick={() => revokeDoctor(doc.address)}
-                className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                className="text-red-500"
               >
                 Revoke
               </button>
@@ -294,7 +266,22 @@ export default function PatientPage() {
           ))
         )}
 
-        <h2 className="font-semibold mt-6 mb-2">Upload New Record</h2>
+        <input
+          value={doctorAddress}
+          onChange={(e) => setDoctorAddress(e.target.value)}
+          placeholder="Doctor Address"
+          className="border p-2 w-full my-2 rounded"
+        />
+
+        <button
+          onClick={grantAccess}
+          className="bg-green-500 text-white px-4 py-1 rounded"
+        >
+          Grant Access
+        </button>
+
+        {/* UPLOAD */}
+        <h2 className="font-semibold mt-6 mb-2 dark:text-white">Upload File</h2>
 
         <div className="flex gap-2 mb-4">
           <input type="file" onChange={handleFileChange} />
@@ -307,68 +294,28 @@ export default function PatientPage() {
           </button>
         </div>
 
-        {message && <p className="text-sm text-gray-600">{message}</p>}
+        {message && <p className="text-sm">{message}</p>}
 
-        <h2 className="font-semibold mt-6 mb-2">Add Doctor</h2>
-
-        <input
-          type="text"
-          placeholder="Doctor Wallet Address"
-          value={doctorAddress}
-          onChange={(e) => setDoctorAddress(e.target.value)}
-          className="border p-2 rounded w-full mb-2"
-        />
-
-        <button
-          onClick={grantAccess}
-          className="bg-green-500 text-white px-4 py-1 rounded mb-4"
-        >
-          Grant Access
-        </button>
-
-        <h2 className="font-semibold mt-6 mb-2">Your Records</h2>
-
-        {records.length === 0 ? (
-          <p className="text-gray-400">No records yet</p>
-        ) : (
-          <>
-            {currentRecords.map((rec, i) => (
-              <div key={i} className="border p-4 rounded bg-gray-50 mb-3">
-                <p className="font-semibold">{rec.fileName}</p>
-                <p className="text-xs text-gray-500 mb-2">{rec.timestamp}</p>
-
-                <FileViewer
-                  url={getIPFSUrl(rec.hash)}
-                  fileType={rec.fileType}
-                />
-              </div>
-            ))}
-
-            <div className="flex justify-between mt-4">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => prev - 1)}
-                className="bg-gray-300 px-3 py-1 rounded disabled:opacity-50"
-              >
-                Prev
-              </button>
-
-              <span className="text-sm">
-                Page {currentPage} / {totalPages || 1}
-              </span>
-
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(prev => prev + 1)}
-                className="bg-gray-300 px-3 py-1 rounded disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </>
-        )}
+        {/* INFO SECTION (REPLACED FILES) */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow mt-6">
+          <h2 className="font-semibold mb-2 dark:text-white">
+            Record Management Info
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Your records are encrypted and securely stored using blockchain & IPFS.
+            Only authorized doctors can access them.
+          </p>
+        </div>
 
       </div>
+
+      {/* ✅ FIXED FOOTER */}
+      <footer className="bg-gray-900 text-white text-center py-3 mt-6 rounded-xl">
+        <p className="text-sm">
+          © 2026 MedTrack • Secure Healthcare on Blockchain
+        </p>
+      </footer>
+
     </div>
   );
 }

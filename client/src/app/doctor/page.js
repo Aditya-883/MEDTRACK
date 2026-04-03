@@ -15,7 +15,6 @@ export default function DoctorPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [authorized, setAuthorized] = useState(null);
-
   const [accessStatus, setAccessStatus] = useState(null);
   const [accessHistory, setAccessHistory] = useState([]);
 
@@ -54,12 +53,12 @@ export default function DoctorPage() {
 
   if (authorized === false) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="bg-white p-6 rounded shadow text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow text-center">
           <h2 className="text-xl font-bold text-red-600 mb-2">
             Unauthorized Access
           </h2>
-          <p className="text-gray-600 mb-4">
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
             Please switch to a doctor wallet
           </p>
           <button
@@ -122,7 +121,6 @@ export default function DoctorPage() {
 
       setRecords(formatted);
 
-      // Access history
       setAccessHistory(prev => [
         {
           doctor: account,
@@ -147,30 +145,49 @@ export default function DoctorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-6">
+
+      <div className="flex-grow max-w-4xl mx-auto bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl shadow-xl">
 
         {/* HEADER */}
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Doctor Dashboard</h1>
+          <h1 className="text-3xl font-bold dark:text-white">
+            Doctor Dashboard
+          </h1>
+
           <button
             onClick={() => {
               clearSession();
               window.location.reload();
             }}
-            className="bg-red-100 text-red-600 px-3 py-1 rounded"
+            className="text-red-500"
           >
             Logout
           </button>
         </div>
 
-        <p className="text-sm text-gray-600 mb-4">
-          <b>Account:</b> {account}
-        </p>
+        {/* ACCOUNT */}
+        <div className="bg-indigo-600 text-white p-4 rounded-xl mb-6 shadow">
+          <p className="text-sm opacity-80">Connected Wallet</p>
+          <p className="font-semibold break-all">{account}</p>
+        </div>
+
+        {/* ABOUT */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow mb-6">
+          <h2 className="font-semibold mb-2 dark:text-white">
+            About Doctor Panel
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Access patient medical records securely using blockchain technology.
+            You can only view records when the patient grants you permission.
+          </p>
+        </div>
 
         {/* ACCESS CHECK */}
-        <div className="mb-5">
-          <h2 className="font-semibold mb-2">Patient Access Check</h2>
+        <div className="mb-6">
+          <h2 className="font-semibold mb-2 dark:text-white">
+            Patient Access Check
+          </h2>
 
           <div className="flex gap-2 mb-2">
             <input
@@ -199,7 +216,7 @@ export default function DoctorPage() {
           )}
         </div>
 
-        {/* FETCH */}
+        {/* FETCH BUTTON */}
         <button
           onClick={fetchRecords}
           disabled={!accessStatus || loading}
@@ -209,21 +226,21 @@ export default function DoctorPage() {
         </button>
 
         {message && (
-          <p className="mb-3 text-sm text-gray-600">{message}</p>
+          <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+            {message}
+          </p>
         )}
-
-        <hr className="my-5" />
 
         {/* RECORDS */}
         <div className="space-y-4">
           {!loading && records.length === 0 && (
-            <p className="text-gray-500">
+            <p className="text-gray-400">
               No records found or access not granted
             </p>
           )}
 
           {records.map((rec, i) => (
-            <div key={i} className="border p-4 rounded bg-gray-50 shadow-sm">
+            <div key={i} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
 
               <div className="flex justify-between items-center mb-2">
                 <p className="font-semibold">{rec.fileName}</p>
@@ -233,16 +250,14 @@ export default function DoctorPage() {
                 </span>
               </div>
 
-              <p className="text-sm text-gray-600 mb-3">
+              <p className="text-sm text-gray-500 mb-3">
                 Uploaded: {rec.timestamp}
               </p>
 
-              {/* ✅ ONLY THIS — NO DUPLICATES */}
               <FileViewer
                 url={getIPFSUrl(rec.hash)}
                 fileType={rec.fileType}
               />
-
             </div>
           ))}
         </div>
@@ -250,23 +265,33 @@ export default function DoctorPage() {
         {/* ACCESS HISTORY */}
         <hr className="my-6" />
 
-        <h2 className="text-lg font-semibold mb-2">Access History</h2>
+        <h2 className="text-lg font-semibold mb-2 dark:text-white">
+          Access History
+        </h2>
 
         <div className="space-y-2">
-          {accessHistory.length === 0 && (
+          {accessHistory.length === 0 ? (
             <p className="text-gray-400">No access history yet</p>
+          ) : (
+            accessHistory.map((entry, i) => (
+              <div key={i} className="bg-gray-100 dark:bg-gray-800 p-3 rounded text-sm">
+                <p><b>Doctor:</b> {entry.doctor}</p>
+                <p><b>Patient:</b> {entry.patient}</p>
+                <p><b>Time:</b> {entry.time}</p>
+              </div>
+            ))
           )}
-
-          {accessHistory.map((entry, i) => (
-            <div key={i} className="border p-2 rounded bg-gray-100 text-sm">
-              <p><b>Doctor:</b> {entry.doctor}</p>
-              <p><b>Patient:</b> {entry.patient}</p>
-              <p><b>Time:</b> {entry.time}</p>
-            </div>
-          ))}
         </div>
 
       </div>
+
+      {/* FOOTER */}
+      <footer className="bg-gray-900 text-white text-center py-3 mt-6 rounded-xl">
+        <p className="text-sm">
+          © 2026 MedTrack • Secure Healthcare on Blockchain
+        </p>
+      </footer>
+
     </div>
   );
 }

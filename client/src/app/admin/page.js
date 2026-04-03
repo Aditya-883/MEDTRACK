@@ -2,6 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { adminLogin, checkUserRole } from '../../lib/auth';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell
+} from 'recharts';
 
 export default function AdminPage() {
   const [users, setUsers] = useState([]);
@@ -40,47 +44,39 @@ export default function AdminPage() {
 
       const address = accounts[0];
 
-      if (!address) {
-        setAuthorized(false);
-        return;
-      }
+      if (!address) return setAuthorized(false);
 
       const user = await checkUserRole(address);
 
-      if (!user || user.role !== 'admin') {
-        setAuthorized(false);
-        return;
-      }
+      if (!user || user.role !== 'admin') return setAuthorized(false);
 
       const token = localStorage.getItem('token');
-
-      if (!token) {
-        await adminLogin();
-      }
+      if (!token) await adminLogin();
 
       setAuthorized(true);
       fetchUsers();
 
-    } catch (err) {
-      console.error(err);
+    } catch {
       setAuthorized(false);
     }
   }
 
   async function fetchUsers() {
-    const token = localStorage.getItem('token');
+    try {
+      const token = localStorage.getItem('token');
 
-    const res = await fetch('http://localhost:5000/api/users', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const res = await fetch('http://localhost:5000/api/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    const data = await res.json();
-    setUsers(data);
+      const data = await res.json();
+      setUsers(data);
+
+    } catch {
+      console.log("Error fetching users");
+    }
   }
 
-  // 🔍 FILTER + SEARCH
   function applyFilters() {
     let temp = [...users];
 
@@ -98,22 +94,6 @@ export default function AdminPage() {
     setCurrentPage(1);
   }
 
-  // 📄 PAGINATION
-  const indexOfLast = currentPage * usersPerPage;
-  const indexOfFirst = indexOfLast - usersPerPage;
-  const currentUsers = filteredUsers.slice(indexOfFirst, indexOfLast);
-  const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
-
-  // 🎯 OPEN MODAL
-  function openModal(address, role) {
-    setModal({ open: true, address, role });
-  }
-
-  function closeModal() {
-    setModal({ open: false, address: '', role: '' });
-  }
-
-  // 🚀 CHANGE ROLE
   async function confirmRoleChange() {
     try {
       const token = localStorage.getItem('token');
@@ -127,147 +107,120 @@ export default function AdminPage() {
         body: JSON.stringify({ role: modal.role }),
       });
 
-      closeModal();
-      fetchUsers();
+      // 🔥 instant update → charts auto update
+      setUsers(prev =>
+        prev.map(u =>
+          u.address === modal.address ? { ...u, role: modal.role } : u
+        )
+      );
 
-    } catch (err) {
-      console.error(err);
-      alert("❌ Failed to update role");
+      setModal({ open: false, address: '', role: '' });
+
+    } catch {
+      alert("Failed");
     }
   }
 
-  function getRoleColor(role) {
-    if (role === 'admin') return 'bg-purple-100 text-purple-700';
-    if (role === 'doctor') return 'bg-blue-100 text-blue-700';
-    if (role === 'patient') return 'bg-green-100 text-green-700';
-    return 'bg-gray-100 text-gray-700';
-  }
-
-  // 📊 ANALYTICS
   const totalAdmins = users.filter(u => u.role === 'admin').length;
   const totalDoctors = users.filter(u => u.role === 'doctor').length;
   const totalPatients = users.filter(u => u.role === 'patient').length;
 
-  // ❌ BLOCK UI
+  // 📊 CHART DATA (AUTO UPDATES)
+  const chartData = [
+    { name: 'Admins', value: totalAdmins },
+    { name: 'Doctors', value: totalDoctors },
+    { name: 'Patients', value: totalPatients },
+  ];
+
+  const COLORS = ['#8b5cf6', '#3b82f6', '#10b981'];
+
+  const indexOfLast = currentPage * usersPerPage;
+  const currentUsers = filteredUsers.slice(indexOfLast - usersPerPage, indexOfLast);
+
   if (authorized === false) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="bg-white p-6 rounded shadow text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-2">
-            Unauthorized Access
-          </h2>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-blue-500 text-white px-4 py-2 rounded"
-          >
-            Reload
-          </button>
-        </div>
-      </div>
-    );
+    return <div className="text-center p-10">Unauthorized</div>;
   }
 
   if (authorized === null) return null;
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-5xl mx-auto bg-white p-6 rounded shadow">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-gray-900 dark:to-black p-6">
 
-        <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
+      <div className="flex-grow max-w-6xl mx-auto bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl shadow-xl">
 
-        {/* 📊 ANALYTICS */}
+        <h1 className="text-3xl font-bold mb-6 dark:text-white">
+          Admin Dashboard
+        </h1>
+
+        {/* 📊 ANALYTICS CARDS */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-purple-100 p-3 rounded">Admins: {totalAdmins}</div>
-          <div className="bg-blue-100 p-3 rounded">Doctors: {totalDoctors}</div>
-          <div className="bg-green-100 p-3 rounded">Patients: {totalPatients}</div>
+          <div className="bg-purple-500 text-white p-4 rounded-xl">Admins: {totalAdmins}</div>
+          <div className="bg-blue-500 text-white p-4 rounded-xl">Doctors: {totalDoctors}</div>
+          <div className="bg-green-500 text-white p-4 rounded-xl">Patients: {totalPatients}</div>
         </div>
 
-        {/* 🔍 SEARCH + FILTER */}
-        <div className="flex gap-3 mb-4">
-          <input
-            type="text"
-            placeholder="Search by address..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border p-2 rounded w-full"
-          />
+        {/* 📈 CHARTS */}
+        <div className="grid grid-cols-2 gap-6 mb-8">
 
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="border p-2 rounded"
-          >
-            <option value="all">All</option>
-            <option value="admin">Admin</option>
-            <option value="doctor">Doctor</option>
-            <option value="patient">Patient</option>
-          </select>
+          {/* BAR CHART */}
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
+            <h2 className="mb-3 font-semibold dark:text-white">User Distribution</h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={chartData}>
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* PIE CHART */}
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
+            <h2 className="mb-3 font-semibold dark:text-white">Role Ratio</h2>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={chartData} dataKey="value" outerRadius={80}>
+                  {chartData.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
         </div>
 
-        {/* 👥 USER LIST */}
+        {/* USERS */}
         <div className="space-y-4">
           {currentUsers.map((u) => (
-            <div
-              key={u._id}
-              className="border p-4 rounded flex justify-between items-center bg-gray-50"
-            >
-              <div>
-                <p className="font-mono text-sm">{u.address}</p>
-                <span className={`px-2 py-1 text-xs rounded ${getRoleColor(u.role)}`}>
-                  {u.role.toUpperCase()}
-                </span>
-              </div>
+            <div key={u._id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow flex justify-between">
+              <p className="font-mono text-sm dark:text-white">{u.address}</p>
 
               <div className="flex gap-2">
-                <button onClick={() => openModal(u.address, 'admin')} className="bg-purple-500 text-white px-3 py-1 rounded text-sm">Admin</button>
-                <button onClick={() => openModal(u.address, 'doctor')} className="bg-blue-500 text-white px-3 py-1 rounded text-sm">Doctor</button>
-                <button onClick={() => openModal(u.address, 'patient')} className="bg-green-500 text-white px-3 py-1 rounded text-sm">Patient</button>
+                <button onClick={() => setModal({ open: true, address: u.address, role: 'admin' })} className="bg-purple-500 text-white px-2 py-1 rounded">Admin</button>
+                <button onClick={() => setModal({ open: true, address: u.address, role: 'doctor' })} className="bg-blue-500 text-white px-2 py-1 rounded">Doctor</button>
+                <button onClick={() => setModal({ open: true, address: u.address, role: 'patient' })} className="bg-green-500 text-white px-2 py-1 rounded">Patient</button>
               </div>
             </div>
-          ))}
-        </div>
-
-        {/* 📄 PAGINATION */}
-        <div className="flex justify-center mt-6 gap-2">
-          {[...Array(totalPages)].map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrentPage(i + 1)}
-              className={`px-3 py-1 rounded ${
-                currentPage === i + 1 ? 'bg-black text-white' : 'bg-gray-200'
-              }`}
-            >
-              {i + 1}
-            </button>
           ))}
         </div>
 
       </div>
 
-      {/* 🧠 MODAL */}
+      {/* FOOTER */}
+      <footer className="bg-gray-900 text-white text-center py-3 mt-6">
+        © 2026 MedTrack • Blockchain Healthcare
+      </footer>
+
+      {/* MODAL */}
       {modal.open && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white p-6 rounded shadow w-80 text-center">
-            <h3 className="text-lg font-semibold mb-3">Confirm Role Change</h3>
-            <p className="text-sm mb-4">
-              Change role to <b>{modal.role}</b>?
-            </p>
-
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={confirmRoleChange}
-                className="bg-green-500 text-white px-4 py-1 rounded"
-              >
-                Confirm
-              </button>
-
-              <button
-                onClick={closeModal}
-                className="bg-gray-300 px-4 py-1 rounded"
-              >
-                Cancel
-              </button>
-            </div>
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50">
+          <div className="bg-white p-6 rounded-xl text-center">
+            <p className="mb-4">Change role to {modal.role}?</p>
+            <button onClick={confirmRoleChange} className="bg-green-500 text-white px-3 py-1 mr-2">Confirm</button>
+            <button onClick={() => setModal({ open: false })} className="bg-gray-300 px-3 py-1">Cancel</button>
           </div>
         </div>
       )}
