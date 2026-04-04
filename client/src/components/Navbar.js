@@ -44,41 +44,13 @@ export default function Navbar() {
         {/* MENU */}
         <div className="flex items-center gap-8">
 
-          {/* HOME */}
-          <Link href="/" className="hover:text-blue-500 transition">
-            Home
-          </Link>
+          {/* ❌ REMOVED HOME */}
 
-          {/* CONNECT DROPDOWN */}
-          <div className="relative group">
-            <span className="cursor-pointer flex items-center gap-1 hover:text-blue-500 transition">
-              Connect
-              <span className="text-xs">▼</span>
-            </span>
-
-            <div className="absolute left-0 mt-3 w-44 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 transform group-hover:translate-y-1">
-              
-              <div className="bg-white dark:bg-gray-800 text-black dark:text-white rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-
-                <Link href="/patient" className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
-                  Patient
-                </Link>
-
-                <Link href="/doctor" className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
-                  Doctor
-                </Link>
-
-                <Link href="/admin" className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
-                  Admin
-                </Link>
-
-              </div>
-            </div>
-          </div>
+          {/* ❌ REMOVED CONNECT DROPDOWN */}
 
           {/* THEME TOGGLE */}
           <button
-            onClick={() => setDark((prev) => !prev)} // ✅ safer toggle
+            onClick={() => setDark((prev) => !prev)}
             className="px-3 py-1 rounded-lg border hover:bg-gray-200 dark:hover:bg-gray-700 transition"
           >
             {dark ? "🌙 Dark" : "☀️ Light"}

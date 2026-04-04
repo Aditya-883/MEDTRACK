@@ -2,10 +2,50 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { adminLogin, checkUserRole } from '../../lib/auth';
+
+import AccessDenied from '../../components/ui/AccessDenied';
+import Sidebar from '../../components/layout/Sidebar'; // ✅ ADDED
+
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
+
+/* 🔔 TOAST */
+function Toast({ message, show, type }) {
+  if (!show) return null;
+
+  return (
+    <div className={`fixed top-6 right-6 px-4 py-2 rounded-lg shadow-lg z-50 text-white
+      ${type === "error" ? "bg-red-500" : "bg-black"}`}>
+      {message}
+    </div>
+  );
+}
+
+/* ⏳ LOADING */
+function LoadingOverlay({ show }) {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 bg-white/60 dark:bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="animate-pulse text-lg font-semibold">
+        Loading...
+      </div>
+    </div>
+  );
+}
+
+/* ⚠️ ERROR UI */
+function ErrorUI({ message }) {
+  if (!message) return null;
+
+  return (
+    <div className="fixed bottom-6 right-6 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+      {message}
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const [users, setUsers] = useState([]);
@@ -24,20 +64,38 @@ export default function AdminPage() {
     role: ''
   });
 
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [toast, setToast] = useState(null);
+
   const hasRun = useRef(false);
 
   useEffect(() => {
     if (hasRun.current) return;
     hasRun.current = true;
     init();
+
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', init);
+    }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', init);
+      }
+    };
   }, []);
 
-  useEffect(() => {
-    applyFilters();
-  }, [search, roleFilter, users]);
+  function showToast(msg, type = "success") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  }
 
   async function init() {
     try {
+      setLoading(true);
+
       const accounts = await window.ethereum.request({
         method: 'eth_accounts',
       });
@@ -57,12 +115,18 @@ export default function AdminPage() {
       fetchUsers();
 
     } catch {
+      setError("Initialization failed");
       setAuthorized(false);
+    } finally {
+      setLoading(false);
     }
   }
 
   async function fetchUsers() {
     try {
+      setLoading(true);
+      setError(null);
+
       const token = localStorage.getItem('token');
 
       const res = await fetch('http://localhost:5000/api/users', {
@@ -71,9 +135,15 @@ export default function AdminPage() {
 
       const data = await res.json();
       setUsers(data);
+      setFilteredUsers(data);
+
+      showToast("Users Loaded");
 
     } catch {
-      console.log("Error fetching users");
+      setError("Failed to fetch users");
+      showToast("Error loading users", "error");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -107,7 +177,6 @@ export default function AdminPage() {
         body: JSON.stringify({ role: modal.role }),
       });
 
-      // 🔥 instant update → charts auto update
       setUsers(prev =>
         prev.map(u =>
           u.address === modal.address ? { ...u, role: modal.role } : u
@@ -116,16 +185,19 @@ export default function AdminPage() {
 
       setModal({ open: false, address: '', role: '' });
 
+      showToast("Role Updated");
+
     } catch {
-      alert("Failed");
+      setError("Failed to update role");
+      showToast("Update failed", "error");
     }
   }
 
+  // 📊 STATS
   const totalAdmins = users.filter(u => u.role === 'admin').length;
   const totalDoctors = users.filter(u => u.role === 'doctor').length;
   const totalPatients = users.filter(u => u.role === 'patient').length;
 
-  // 📊 CHART DATA (AUTO UPDATES)
   const chartData = [
     { name: 'Admins', value: totalAdmins },
     { name: 'Doctors', value: totalDoctors },
@@ -136,95 +208,121 @@ export default function AdminPage() {
 
   const indexOfLast = currentPage * usersPerPage;
   const currentUsers = filteredUsers.slice(indexOfLast - usersPerPage, indexOfLast);
+  const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
 
-  if (authorized === false) {
-    return <div className="text-center p-10">Unauthorized</div>;
-  }
-
+  if (authorized === false) return <AccessDenied />;
   if (authorized === null) return null;
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-gray-900 dark:to-black p-6">
+    <div className="flex">
 
-      <div className="flex-grow max-w-6xl mx-auto bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl shadow-xl">
+      {/* ✅ SIDEBAR */}
+      <Sidebar />
 
-        <h1 className="text-3xl font-bold mb-6 dark:text-white">
-          Admin Dashboard
-        </h1>
+      {/* ✅ MAIN PAGE */}
+      <div className="flex-1 min-h-screen flex flex-col bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-900 dark:to-black p-6">
 
-        {/* 📊 ANALYTICS CARDS */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-purple-500 text-white p-4 rounded-xl">Admins: {totalAdmins}</div>
-          <div className="bg-blue-500 text-white p-4 rounded-xl">Doctors: {totalDoctors}</div>
-          <div className="bg-green-500 text-white p-4 rounded-xl">Patients: {totalPatients}</div>
-        </div>
+        <LoadingOverlay show={loading} />
+        <Toast message={toast?.msg} show={!!toast} type={toast?.type} />
+        <ErrorUI message={error} />
 
-        {/* 📈 CHARTS */}
-        <div className="grid grid-cols-2 gap-6 mb-8">
+        <div className="flex-grow max-w-6xl mx-auto w-full">
 
-          {/* BAR CHART */}
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
-            <h2 className="mb-3 font-semibold dark:text-white">User Distribution</h2>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={chartData}>
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="value" />
-              </BarChart>
-            </ResponsiveContainer>
+          {/* HEADER */}
+          <div className="flex justify-between mb-6">
+            <h1 className="text-3xl font-bold">Admin</h1>
+
+            <button onClick={fetchUsers} className="bg-blue-500 text-white px-3 py-1 rounded">
+              Refresh
+            </button>
           </div>
 
-          {/* PIE CHART */}
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
-            <h2 className="mb-3 font-semibold dark:text-white">Role Ratio</h2>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={chartData} dataKey="value" outerRadius={80}>
-                  {chartData.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+          {/* SEARCH */}
+          <div className="flex gap-3 mb-6">
+            <input
+              placeholder="Search address..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="border p-2 rounded w-full"
+            />
+
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="border p-2 rounded"
+            >
+              <option value="all">All</option>
+              <option value="admin">Admin</option>
+              <option value="doctor">Doctor</option>
+              <option value="patient">Patient</option>
+            </select>
+
+            <button onClick={applyFilters} className="bg-indigo-500 text-white px-4 py-2 rounded">
+              Apply
+            </button>
           </div>
 
-        </div>
+          {/* STATS */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-purple-500 text-white p-4 rounded-xl">Admins: {totalAdmins}</div>
+            <div className="bg-blue-500 text-white p-4 rounded-xl">Doctors: {totalDoctors}</div>
+            <div className="bg-green-500 text-white p-4 rounded-xl">Patients: {totalPatients}</div>
+          </div>
 
-        {/* USERS */}
-        <div className="space-y-4">
-          {currentUsers.map((u) => (
-            <div key={u._id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow flex justify-between">
-              <p className="font-mono text-sm dark:text-white">{u.address}</p>
+          {/* CHARTS */}
+          <div className="grid grid-cols-2 gap-6 mb-8">
 
-              <div className="flex gap-2">
-                <button onClick={() => setModal({ open: true, address: u.address, role: 'admin' })} className="bg-purple-500 text-white px-2 py-1 rounded">Admin</button>
-                <button onClick={() => setModal({ open: true, address: u.address, role: 'doctor' })} className="bg-blue-500 text-white px-2 py-1 rounded">Doctor</button>
-                <button onClick={() => setModal({ open: true, address: u.address, role: 'patient' })} className="bg-green-500 text-white px-2 py-1 rounded">Patient</button>
-              </div>
+            <div className="bg-white p-4 rounded-xl shadow">
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={chartData}>
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          ))}
+
+            <div className="bg-white p-4 rounded-xl shadow">
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={chartData} dataKey="value" outerRadius={80}>
+                    {chartData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+          </div>
+
+          {/* USERS */}
+          <div className="space-y-4">
+            {loading ? (
+              <p>Loading users...</p>
+            ) : currentUsers.map((u) => (
+              <div key={u._id} className="bg-white p-4 rounded-xl shadow flex justify-between">
+                <p className="font-mono text-sm">{u.address}</p>
+
+                <div className="flex gap-2">
+                  <button onClick={() => setModal({ open: true, address: u.address, role: 'admin' })} className="bg-purple-500 text-white px-2 py-1 rounded">Admin</button>
+                  <button onClick={() => setModal({ open: true, address: u.address, role: 'doctor' })} className="bg-blue-500 text-white px-2 py-1 rounded">Doctor</button>
+                  <button onClick={() => setModal({ open: true, address: u.address, role: 'patient' })} className="bg-green-500 text-white px-2 py-1 rounded">Patient</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
         </div>
+
+        {/* FOOTER */}
+        <footer className="bg-black text-white text-center py-4 mt-10 rounded-xl">
+          © 2026 MedTrack • Secure Healthcare on Blockchain
+        </footer>
 
       </div>
-
-      {/* FOOTER */}
-      <footer className="bg-gray-900 text-white text-center py-3 mt-6">
-        © 2026 MedTrack • Blockchain Healthcare
-      </footer>
-
-      {/* MODAL */}
-      {modal.open && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50">
-          <div className="bg-white p-6 rounded-xl text-center">
-            <p className="mb-4">Change role to {modal.role}?</p>
-            <button onClick={confirmRoleChange} className="bg-green-500 text-white px-3 py-1 mr-2">Confirm</button>
-            <button onClick={() => setModal({ open: false })} className="bg-gray-300 px-3 py-1">Cancel</button>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

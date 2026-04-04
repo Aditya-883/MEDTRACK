@@ -1,321 +1,262 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { getContract } from '../../web3/contract';
-import { encryptData } from '../../utils/encryption';
-import { uploadToIPFS } from '../../web3/ipfs';
-import { checkUserRole } from '../../lib/auth';
-import { clearSession } from '../../lib/session';
+import { useState, useEffect } from "react";
+import Sidebar from "../../components/layout/Sidebar";
+import { getContract } from "../../web3/contract";
+import { encryptData } from "../../utils/encryption";
+import { uploadToIPFS } from "../../web3/ipfs";
+import { checkUserRole } from "../../lib/auth";
+import { clearSession } from "../../lib/session";
 
-const BASE_URL = "http://localhost:5000/api";
+/* 🔔 TOAST */
+function Toast({ toast }) {
+  if (!toast) return null;
+  return (
+    <div className={`fixed top-5 right-5 px-4 py-2 rounded shadow text-white z-50
+      ${toast.type === "error" ? "bg-red-500" : "bg-green-500"}`}>
+      {toast.msg}
+    </div>
+  );
+}
+
+/* ⏳ SKELETON */
+function Skeleton() {
+  return <div className="h-20 bg-gray-300 animate-pulse rounded"></div>;
+}
 
 export default function PatientPage() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const [account, setAccount] = useState(null);
   const [file, setFile] = useState(null);
-  const [doctorAddress, setDoctorAddress] = useState('');
   const [records, setRecords] = useState([]);
-  const [message, setMessage] = useState('');
-  const [authorized, setAuthorized] = useState(null);
   const [doctorList, setDoctorList] = useState([]);
+  const [authorized, setAuthorized] = useState(null);
+  const [initLoading, setInitLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [sortOrder, setSortOrder] = useState("newest");
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     init();
 
     if (window.ethereum) {
-      window.ethereum.on('accountsChanged', () => {
-        window.location.reload();
-      });
+      window.ethereum.on("accountsChanged", init);
     }
+
+    return () => {
+      window.ethereum?.removeListener("accountsChanged", init);
+    };
   }, []);
+
+  function showToast(msg, type = "success") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  }
 
   async function init() {
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-      const currentAccount = accounts[0];
-      setAccount(currentAccount);
+      setInitLoading(true);
 
-      if (!currentAccount) return setAuthorized(false);
+      const accounts = await window.ethereum.request({ method: "eth_accounts" });
+      const acc = accounts[0];
+      setAccount(acc);
 
-      let user = await checkUserRole(currentAccount);
+      if (!acc) return setAuthorized(false);
 
-      if (!user) {
-        try {
-          const res = await fetch(`${BASE_URL}/users/register`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              address: currentAccount,
-              role: "patient"
-            })
-          });
-
-          if (!res.ok) throw new Error();
-          user = await res.json();
-
-        } catch {
-          return setAuthorized(false);
-        }
-      }
-
-      if (user.role !== 'patient') return setAuthorized(false);
+      const user = await checkUserRole(acc);
+      if (!user || user.role !== "patient") return setAuthorized(false);
 
       setAuthorized(true);
+      fetchDoctors(acc);
+      fetchRecords();
 
-      await fetchMyRecords();
-      await fetchDoctorAccessList();
-
-    } catch (err) {
-      console.error("Init error:", err);
+    } catch {
       setAuthorized(false);
+    } finally {
+      setInitLoading(false);
     }
   }
 
-  async function fetchDoctorAccessList() {
+  async function fetchDoctors(acc) {
     try {
       const contract = await getContract(false);
-      const doctors = await contract.getAuthorizedDoctors(account);
-
-      const list = [];
-      for (let doc of doctors) {
-        const status = await contract.checkAccess(account, doc);
-        if (status) list.push({ address: doc });
-      }
-
-      setDoctorList(list);
-
+      const docs = await contract.getAuthorizedDoctors(acc);
+      setDoctorList(docs.map(d => ({ address: d })));
     } catch {
       setDoctorList([]);
     }
   }
 
-  async function fetchMyRecords() {
+  // ✅ SAFE FETCH (fixes 0x error)
+  async function fetchRecords() {
     try {
       const contract = await getContract(false);
-
-      let data;
-
-      try {
-        data = await contract.viewMyRecords();
-      } catch {
-        setRecords([]);
-        return;
-      }
+      const data = await contract.viewMyRecords();
 
       if (!data || data.length === 0) {
         setRecords([]);
         return;
       }
 
-      setRecords(data);
+      let sorted = [...data];
 
-    } catch {
+      if (sortOrder === "newest") {
+        sorted.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+      } else {
+        sorted.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+      }
+
+      setRecords(sorted);
+
+    } catch (err) {
+      console.error(err);
       setRecords([]);
+      showToast("No records found", "error");
     }
-  }
-
-  function validateFile(file) {
-    const allowed = ["application/pdf", "image/png", "image/jpeg"];
-    if (!allowed.includes(file.type)) {
-      alert("Only PDF/Image allowed");
-      return false;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      alert("Max 10MB");
-      return false;
-    }
-    return true;
-  }
-
-  function handleFileChange(e) {
-    const f = e.target.files[0];
-    if (!f || !validateFile(f)) return;
-
-    setFile(f);
-    setMessage(`Selected: ${f.name}`);
   }
 
   async function uploadRecord() {
-    if (!file) return;
+    if (!file) return showToast("Select file", "error");
 
     try {
       setUploading(true);
-      setMessage("Uploading...");
 
       const contract = await getContract(true);
+      const hash = await uploadToIPFS(file);
+      const enc = encryptData(hash);
 
-      const ipfsHash = await uploadToIPFS(file);
-      const encryptedHash = encryptData(ipfsHash);
-
-      const tx = await contract.uploadRecord(
-        account,
-        encryptedHash,
-        file.type,
-        file.name
-      );
-
+      const tx = await contract.uploadRecord(account, enc, file.type, file.name);
       await tx.wait();
 
-      setMessage("✅ Uploaded successfully");
-      setFile(null);
+      showToast("Uploaded 🚀");
+      setNotifications(prev => ["New record uploaded", ...prev]);
+
+      fetchRecords();
 
     } catch {
-      setMessage("❌ Upload failed");
+      showToast("Upload failed", "error");
     } finally {
       setUploading(false);
     }
   }
 
-  async function grantAccess() {
-    if (!doctorAddress) return;
-
-    try {
-      const contract = await getContract(true);
-      const tx = await contract.grantAccess(doctorAddress);
-      await tx.wait();
-
-      setDoctorAddress('');
-      await fetchDoctorAccessList();
-
-    } catch {
-      alert("Grant failed");
-    }
-  }
-
-  async function revokeDoctor(address) {
-    try {
-      const contract = await getContract(true);
-      const tx = await contract.revokeAccess(address);
-      await tx.wait();
-
-      await fetchDoctorAccessList();
-
-    } catch {
-      alert("Revoke failed");
-    }
+  if (initLoading) {
+    return (
+      <div className="flex">
+        <Sidebar onToggle={setSidebarOpen} />
+        <div className="flex-1 p-6 space-y-3">
+          <Skeleton /><Skeleton /><Skeleton />
+        </div>
+      </div>
+    );
   }
 
   if (authorized === false) {
-    return <div className="text-center mt-20 text-red-500">Unauthorized</div>;
+    return (
+      <div className="flex">
+        <Sidebar onToggle={setSidebarOpen} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-xl shadow text-center">
+            <h2 className="text-red-500 text-xl font-bold">Access Denied</h2>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  if (authorized === null) return null;
-
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-teal-100 dark:from-gray-900 dark:to-gray-800 p-6">
+    <div className="flex min-h-screen bg-gray-100">
 
-      <div className="flex-grow max-w-4xl mx-auto bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl shadow-xl">
+      <Sidebar onToggle={setSidebarOpen} />
 
-        {/* HEADER */}
-        <div className="flex justify-between mb-6">
-          <h1 className="text-3xl font-bold dark:text-white">
-            Patient Dashboard
-          </h1>
+      <div className="flex-1 p-6 transition-all duration-300">
+
+        <Toast toast={toast} />
+
+        {/* ✅ CLEAN HEADER */}
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">Patient</h1>
+            <p className="text-sm text-gray-500">
+              Manage your medical records securely
+            </p>
+          </div>
 
           <button
-            onClick={() => { clearSession(); location.reload(); }}
-            className="text-red-500"
+            onClick={() => {
+              clearSession();
+              location.reload();
+            }}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
           >
             Logout
           </button>
         </div>
 
-        {/* WALLET */}
-        <div className="bg-blue-600 text-white p-4 rounded mb-6">
-          <p className="text-sm opacity-80">Connected Wallet</p>
-          <p className="font-semibold break-all">{account}</p>
+        {/* 🔔 NOTIFICATIONS */}
+        <div className="mb-4">
+          <h2 className="font-semibold mb-2">Notifications 🔔</h2>
+          <div className="bg-white p-3 rounded shadow text-sm">
+            {notifications.length === 0 ? "No notifications" :
+              notifications.map((n, i) => <p key={i}>• {n}</p>)
+            }
+          </div>
         </div>
 
-        {/* ABOUT */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-2 dark:text-white">
-            About Patient Panel
-          </h2>
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Manage your medical records securely using blockchain.
-            Grant and revoke doctor access anytime with full control.
-          </p>
+        {/* 📊 STATS */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-blue-100 p-4 rounded">Records: {records.length}</div>
+          <div className="bg-green-100 p-4 rounded">Doctors: {doctorList.length}</div>
         </div>
 
-        {/* HEALTH TIPS */}
-        <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-4 rounded-xl mb-6 shadow">
-          <h2 className="font-semibold mb-2">Health Tips</h2>
-          <ul className="text-sm list-disc ml-4">
-            <li>Stay hydrated 💧</li>
-            <li>Regular checkups 🏥</li>
-            <li>Balanced diet 🥗</li>
-          </ul>
-        </div>
-
-        {/* DOCTORS */}
-        <h2 className="font-semibold mb-2 dark:text-white">Doctors Access</h2>
-
-        {doctorList.length === 0 ? (
-          <p className="text-gray-400 mb-4">No doctors added</p>
-        ) : (
-          doctorList.map((doc, i) => (
-            <div key={i} className="flex justify-between bg-gray-100 dark:bg-gray-800 p-2 rounded mb-2">
-              <span>{doc.address}</span>
-              <button
-                onClick={() => revokeDoctor(doc.address)}
-                className="text-red-500"
-              >
-                Revoke
-              </button>
-            </div>
-          ))
-        )}
-
-        <input
-          value={doctorAddress}
-          onChange={(e) => setDoctorAddress(e.target.value)}
-          placeholder="Doctor Address"
-          className="border p-2 w-full my-2 rounded"
-        />
-
-        <button
-          onClick={grantAccess}
-          className="bg-green-500 text-white px-4 py-1 rounded"
+        {/* 🔽 SORT */}
+        <select
+          value={sortOrder}
+          onChange={(e) => {
+            setSortOrder(e.target.value);
+            fetchRecords();
+          }}
+          className="mb-4 border p-2 rounded"
         >
-          Grant Access
-        </button>
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+        </select>
 
-        {/* UPLOAD */}
-        <h2 className="font-semibold mt-6 mb-2 dark:text-white">Upload File</h2>
-
-        <div className="flex gap-2 mb-4">
-          <input type="file" onChange={handleFileChange} />
+        {/* 📤 UPLOAD */}
+        <div className="bg-white p-4 rounded shadow mb-6">
+          <input type="file" onChange={(e) => setFile(e.target.files[0])} />
           <button
             onClick={uploadRecord}
-            disabled={uploading}
-            className="bg-blue-500 text-white px-4 py-1 rounded"
+            className="bg-blue-500 text-white px-4 py-2 rounded ml-2"
           >
             {uploading ? "Uploading..." : "Upload"}
           </button>
         </div>
 
-        {message && <p className="text-sm">{message}</p>}
-
-        {/* INFO SECTION (REPLACED FILES) */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow mt-6">
-          <h2 className="font-semibold mb-2 dark:text-white">
-            Record Management Info
-          </h2>
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Your records are encrypted and securely stored using blockchain & IPFS.
-            Only authorized doctors can access them.
-          </p>
+        {/* 📂 RECORDS */}
+        <div className="space-y-3">
+          {records.length === 0 ? (
+            <p className="text-gray-400">No records</p>
+          ) : (
+            records.map((r, i) => (
+              <div key={i} className="bg-white p-4 rounded shadow">
+                <p className="font-semibold">{r.fileName}</p>
+                <p className="text-sm text-gray-500">
+                  {r.fileType?.includes("pdf") ? "PDF 📄" : "Image 🖼️"}
+                </p>
+              </div>
+            ))
+          )}
         </div>
 
+        {/* FOOTER */}
+        <footer className="bg-black text-white text-center py-3 mt-10 rounded">
+          © 2026 MedTrack
+        </footer>
+
       </div>
-
-      {/* ✅ FIXED FOOTER */}
-      <footer className="bg-gray-900 text-white text-center py-3 mt-6 rounded-xl">
-        <p className="text-sm">
-          © 2026 MedTrack • Secure Healthcare on Blockchain
-        </p>
-      </footer>
-
     </div>
   );
 }

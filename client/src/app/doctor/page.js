@@ -7,106 +7,153 @@ import { getIPFSUrl } from '../../utils/ipfsGateway';
 import FileViewer from '../../components/FileViewer';
 import { checkUserRole } from '../../lib/auth';
 import { clearSession } from '../../lib/session';
+import AccessDenied from '../../components/ui/AccessDenied';
+import Sidebar from '../../components/layout/Sidebar'; // ✅ ADDED
+
+/* 🔔 TOAST */
+function Toast({ message, show, type }) {
+  if (!show) return null;
+
+  return (
+    <div className={`fixed top-6 right-6 px-4 py-2 rounded-lg shadow-lg z-50 text-white
+      ${type === "error" ? "bg-red-500" : "bg-black"}`}>
+      {message}
+    </div>
+  );
+}
+
+/* ⏳ LOADING OVERLAY */
+function LoadingOverlay({ show }) {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 bg-white/60 dark:bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="animate-pulse text-lg font-semibold">
+        Loading...
+      </div>
+    </div>
+  );
+}
+
+/* ⚠️ ERROR UI */
+function ErrorUI({ message }) {
+  if (!message) return null;
+
+  return (
+    <div className="fixed bottom-6 right-6 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+      {message}
+    </div>
+  );
+}
 
 export default function DoctorPage() {
   const [account, setAccount] = useState(null);
   const [patientAddress, setPatientAddress] = useState('');
   const [records, setRecords] = useState([]);
+
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  const [initLoading, setInitLoading] = useState(true);
+
   const [authorized, setAuthorized] = useState(null);
   const [accessStatus, setAccessStatus] = useState(null);
-  const [accessHistory, setAccessHistory] = useState([]);
+
+  const [toast, setToast] = useState(null);
+  const [error, setError] = useState(null);
+
+  const [activity, setActivity] = useState([]);
+  const [stats, setStats] = useState({
+    patientsChecked: 0,
+    recordsViewed: 0
+  });
+
+  const [lastPatient, setLastPatient] = useState(null);
 
   useEffect(() => {
     init();
 
     if (window.ethereum) {
-      window.ethereum.on('accountsChanged', () => {
-        window.location.reload();
-      });
+      window.ethereum.on('accountsChanged', init);
     }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', init);
+      }
+    };
   }, []);
 
+  function showToast(msg, type = "success") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  }
+
+  function addActivity(text) {
+    setActivity(prev => [
+      { text, time: new Date().toLocaleTimeString() },
+      ...prev.slice(0, 5)
+    ]);
+  }
+
   async function init() {
-    const accounts = await window.ethereum.request({
-      method: 'eth_accounts',
-    });
+    try {
+      setInitLoading(true);
 
-    const currentAccount = accounts[0];
-    setAccount(currentAccount);
+      const accounts = await window.ethereum.request({
+        method: 'eth_accounts',
+      });
 
-    if (!currentAccount) {
+      const acc = accounts[0];
+      setAccount(acc);
+
+      if (!acc) return setAuthorized(false);
+
+      const user = await checkUserRole(acc);
+      if (!user || user.role !== 'doctor') return setAuthorized(false);
+
+      setAuthorized(true);
+
+    } catch {
       setAuthorized(false);
-      return;
+    } finally {
+      setInitLoading(false);
     }
-
-    const user = await checkUserRole(currentAccount);
-
-    if (!user || user.role !== 'doctor') {
-      setAuthorized(false);
-      return;
-    }
-
-    setAuthorized(true);
   }
-
-  if (authorized === false) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-2">
-            Unauthorized Access
-          </h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">
-            Please switch to a doctor wallet
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-blue-500 text-white px-4 py-2 rounded"
-          >
-            Reload
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (authorized === null) return null;
 
   async function checkAccess() {
     if (!patientAddress) {
-      return setMessage("❌ Enter patient address");
+      return showToast("Enter patient address", "error");
     }
 
     try {
       const contract = await getContract(false);
-
-      const hasAccess = await contract.checkAccess(
-        patientAddress,
-        account
-      );
+      const hasAccess = await contract.checkAccess(patientAddress, account);
 
       setAccessStatus(hasAccess);
+      setLastPatient(patientAddress);
 
-      setMessage(
-        hasAccess ? "🟢 Access Granted" : "🔴 Access Denied"
+      setStats(prev => ({
+        ...prev,
+        patientsChecked: prev.patientsChecked + 1
+      }));
+
+      addActivity(`Checked ${patientAddress}`);
+
+      showToast(
+        hasAccess ? "Access Granted ✅" : "Access Denied ❌",
+        hasAccess ? "success" : "error"
       );
-
-    } catch (err) {
-      console.error(err);
-      setMessage("❌ Error checking access");
+    } catch {
+      setError("Failed to check access");
     }
   }
 
   async function fetchRecords() {
     if (!accessStatus) {
-      return setMessage("❌ You don’t have access to this patient");
+      return showToast("No access to this patient", "error");
     }
 
     try {
       setLoading(true);
-      setMessage("Fetching records...");
 
       const contract = await getContract(false);
       const data = await contract.viewRecords(patientAddress);
@@ -115,183 +162,176 @@ export default function DoctorPage() {
         hash: decryptData(r.ipfsHash),
         fileType: r.fileType,
         fileName: r.fileName,
-        uploadedBy: r.uploadedBy,
         timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
       }));
 
       setRecords(formatted);
 
-      setAccessHistory(prev => [
-        {
-          doctor: account,
-          patient: patientAddress,
-          time: new Date().toLocaleString()
-        },
-        ...prev
-      ]);
+      setStats(prev => ({
+        ...prev,
+        recordsViewed: prev.recordsViewed + formatted.length
+      }));
 
-      setMessage(
-        formatted.length === 0
-          ? "No records found"
-          : "✅ Records loaded"
-      );
+      addActivity(`Viewed ${formatted.length} records`);
 
-    } catch (err) {
-      console.error(err);
-      setMessage("❌ Failed to fetch records");
+    } catch {
+      setError("Failed to fetch records");
     } finally {
       setLoading(false);
     }
   }
 
+  if (initLoading) {
+    return <LoadingOverlay show={true} />;
+  }
+
+  if (authorized === false) {
+    return <AccessDenied role="doctor" />;
+  }
+
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-6">
+    <div className="flex">
 
-      <div className="flex-grow max-w-4xl mx-auto bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl shadow-xl">
+      {/* ✅ SIDEBAR */}
+      <Sidebar />
 
-        {/* HEADER */}
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold dark:text-white">
-            Doctor Dashboard
-          </h1>
+      {/* ✅ MAIN PAGE */}
+      <div className="flex-1 min-h-screen flex flex-col bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-900 dark:to-black p-6">
 
-          <button
-            onClick={() => {
-              clearSession();
-              window.location.reload();
-            }}
-            className="text-red-500"
-          >
-            Logout
-          </button>
-        </div>
+        <LoadingOverlay show={loading} />
+        <Toast message={toast?.msg} show={!!toast} type={toast?.type} />
+        <ErrorUI message={error} />
 
-        {/* ACCOUNT */}
-        <div className="bg-indigo-600 text-white p-4 rounded-xl mb-6 shadow">
-          <p className="text-sm opacity-80">Connected Wallet</p>
-          <p className="font-semibold break-all">{account}</p>
-        </div>
+        <div className="flex-grow max-w-6xl mx-auto space-y-6 w-full">
 
-        {/* ABOUT */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-2 dark:text-white">
-            About Doctor Panel
-          </h2>
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Access patient medical records securely using blockchain technology.
-            You can only view records when the patient grants you permission.
-          </p>
-        </div>
+          {/* HEADER */}
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold">Doctor</h1>
+            <button
+              onClick={() => { clearSession(); location.reload(); }}
+              className="text-red-500"
+            >
+              Logout
+            </button>
+          </div>
 
-        {/* ACCESS CHECK */}
-        <div className="mb-6">
-          <h2 className="font-semibold mb-2 dark:text-white">
-            Patient Access Check
-          </h2>
+          {/* WALLET */}
+          <div className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white p-5 rounded-xl shadow flex justify-between items-center">
+            <div>
+              <p className="text-sm opacity-80">Connected Wallet</p>
+              <p className="font-mono text-sm break-all">{account}</p>
+            </div>
 
-          <div className="flex gap-2 mb-2">
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(account);
+                showToast("Copied 📋");
+              }}
+              className="bg-white text-blue-600 px-3 py-1 rounded text-sm"
+            >
+              Copy
+            </button>
+          </div>
+
+          {/* STATS */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-xl shadow">
+              <p className="text-gray-500">Patients Checked</p>
+              <h2 className="text-xl font-bold">{stats.patientsChecked}</h2>
+            </div>
+            <div className="bg-white p-4 rounded-xl shadow">
+              <p className="text-gray-500">Records Viewed</p>
+              <h2 className="text-xl font-bold">{stats.recordsViewed}</h2>
+            </div>
+          </div>
+
+          {/* PATIENT LOOKUP */}
+          <div className="bg-white p-5 rounded-xl shadow space-y-3">
+            <h2 className="font-semibold">Patient Lookup</h2>
+
             <input
-              type="text"
-              placeholder="Enter Patient Wallet Address"
+              placeholder="Enter Patient Address"
               value={patientAddress}
               onChange={(e) => {
                 setPatientAddress(e.target.value);
                 setAccessStatus(null);
               }}
-              className="flex-1 border p-2 rounded"
+              className="border p-2 w-full rounded"
             />
 
-            <button
-              onClick={checkAccess}
-              className="bg-yellow-500 text-white px-4 py-2 rounded"
-            >
-              Check
-            </button>
+            <div className="flex gap-2">
+              <button onClick={checkAccess} className="bg-yellow-500 text-white px-4 py-2 rounded">
+                Check Access
+              </button>
+
+              <button onClick={fetchRecords} className="bg-blue-600 text-white px-4 py-2 rounded">
+                Fetch Records
+              </button>
+            </div>
+
+            {accessStatus !== null && (
+              <span className={`inline-block px-3 py-1 rounded text-sm font-semibold
+                ${accessStatus ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                {accessStatus ? "Access Granted" : "Access Denied"}
+              </span>
+            )}
           </div>
 
-          {accessStatus !== null && (
-            <p className={`text-sm font-semibold ${accessStatus ? "text-green-600" : "text-red-500"}`}>
-              {accessStatus ? "Access Granted" : "Access Denied"}
-            </p>
-          )}
-        </div>
-
-        {/* FETCH BUTTON */}
-        <button
-          onClick={fetchRecords}
-          disabled={!accessStatus || loading}
-          className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50 mb-4"
-        >
-          {loading ? "Fetching..." : "Fetch Records"}
-        </button>
-
-        {message && (
-          <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
-            {message}
-          </p>
-        )}
-
-        {/* RECORDS */}
-        <div className="space-y-4">
-          {!loading && records.length === 0 && (
-            <p className="text-gray-400">
-              No records found or access not granted
-            </p>
-          )}
-
-          {records.map((rec, i) => (
-            <div key={i} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
-
-              <div className="flex justify-between items-center mb-2">
-                <p className="font-semibold">{rec.fileName}</p>
-
-                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded">
-                  {rec.fileType.includes("pdf") ? "PDF" : "Image"}
-                </span>
+          {/* RECORDS */}
+          <div className="space-y-4">
+            {loading ? (
+              <div className="h-24 bg-gray-200 animate-pulse rounded-xl"></div>
+            ) : records.length === 0 ? (
+              <div className="text-center text-gray-400 py-10">
+                No records found
               </div>
+            ) : (
+              records.map((rec, i) => (
+                <div key={i} className="bg-white p-4 rounded-xl shadow">
+                  <div className="flex justify-between">
+                    <p className="font-semibold">{rec.fileName}</p>
+                    <span className="text-xs bg-blue-100 px-2 py-1 rounded">
+                      {rec.fileType.includes('pdf') ? 'PDF' : 'Image'}
+                    </span>
+                  </div>
 
-              <p className="text-sm text-gray-500 mb-3">
-                Uploaded: {rec.timestamp}
-              </p>
+                  <p className="text-sm text-gray-500 mb-2">
+                    {rec.timestamp}
+                  </p>
 
-              <FileViewer
-                url={getIPFSUrl(rec.hash)}
-                fileType={rec.fileType}
-              />
-            </div>
-          ))}
+                  <FileViewer
+                    url={getIPFSUrl(rec.hash)}
+                    fileType={rec.fileType}
+                  />
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* ACTIVITY */}
+          <div className="bg-white p-5 rounded-xl shadow">
+            <h2 className="font-semibold mb-3">Recent Activity</h2>
+
+            {activity.length === 0 ? (
+              <p className="text-gray-400 text-sm">No activity yet</p>
+            ) : (
+              activity.map((a, i) => (
+                <div key={i} className="flex justify-between text-sm border-b py-1">
+                  <span>{a.text}</span>
+                  <span className="text-gray-400">{a.time}</span>
+                </div>
+              ))
+            )}
+          </div>
+
         </div>
 
-        {/* ACCESS HISTORY */}
-        <hr className="my-6" />
-
-        <h2 className="text-lg font-semibold mb-2 dark:text-white">
-          Access History
-        </h2>
-
-        <div className="space-y-2">
-          {accessHistory.length === 0 ? (
-            <p className="text-gray-400">No access history yet</p>
-          ) : (
-            accessHistory.map((entry, i) => (
-              <div key={i} className="bg-gray-100 dark:bg-gray-800 p-3 rounded text-sm">
-                <p><b>Doctor:</b> {entry.doctor}</p>
-                <p><b>Patient:</b> {entry.patient}</p>
-                <p><b>Time:</b> {entry.time}</p>
-              </div>
-            ))
-          )}
-        </div>
+        {/* FOOTER */}
+        <footer className="bg-black text-white text-center py-4 mt-10 rounded-xl">
+          © 2026 MedTrack • Secure Healthcare on Blockchain
+        </footer>
 
       </div>
-
-      {/* FOOTER */}
-      <footer className="bg-gray-900 text-white text-center py-3 mt-6 rounded-xl">
-        <p className="text-sm">
-          © 2026 MedTrack • Secure Healthcare on Blockchain
-        </p>
-      </footer>
-
     </div>
   );
 }
