@@ -3,37 +3,44 @@
 import { useEffect } from 'react';
 
 export default function WalletListener() {
+
   useEffect(() => {
     if (!window.ethereum) return;
 
     let currentAccount = null;
 
-    const getInitialAccount = async () => {
+    const syncWallet = async () => {
       const accounts = await window.ethereum.request({
         method: 'eth_accounts',
       });
-      currentAccount = accounts[0];
-    };
 
-    const handleAccountsChanged = (accounts) => {
-      if (!accounts || accounts.length === 0) return;
+      const acc = accounts[0] || null;
 
-      const newAccount = accounts[0];
+      if (currentAccount !== acc) {
+        currentAccount = acc;
 
-      // ✅ Only reload if account ACTUALLY changed
-      if (currentAccount && newAccount !== currentAccount) {
-        window.location.reload();
+        if (acc) {
+          localStorage.setItem("wallet", acc);
+        } else {
+          localStorage.removeItem("wallet");
+        }
+
+        console.log("🔥 Wallet Synced:", acc);
+
+        // 🔥 IMPORTANT: dispatch with value
+        window.dispatchEvent(
+          new CustomEvent("walletChanged", { detail: acc })
+        );
       }
-
-      currentAccount = newAccount;
     };
 
-    getInitialAccount();
+    // initial load
+    syncWallet();
 
-    window.ethereum.on('accountsChanged', handleAccountsChanged);
+    window.ethereum.on('accountsChanged', syncWallet);
 
     return () => {
-      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      window.ethereum.removeListener('accountsChanged', syncWallet);
     };
   }, []);
 
