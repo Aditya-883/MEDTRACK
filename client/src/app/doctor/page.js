@@ -6,9 +6,8 @@ import { decryptData } from '../../utils/encryption';
 import { getIPFSUrl } from '../../utils/ipfsGateway';
 import FileViewer from '../../components/FileViewer';
 import { checkUserRole } from '../../lib/auth';
-import { clearSession } from '../../lib/session';
-import AccessDenied from '../../components/ui/AccessDenied';
-import Sidebar from '../../components/layout/Sidebar'; // ✅ ADDED
+import Sidebar from '../../components/layout/Sidebar';
+import UnauthorizedPage from '../unauthorized/page'; // ✅ UPDATED
 
 /* 🔔 TOAST */
 function Toast({ message, show, type }) {
@@ -44,6 +43,12 @@ function ErrorUI({ message }) {
       {message}
     </div>
   );
+}
+
+/* 🔐 SHORT ADDRESS */
+function shortenAddress(addr) {
+  if (!addr) return '';
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
 export default function DoctorPage() {
@@ -154,6 +159,7 @@ export default function DoctorPage() {
 
     try {
       setLoading(true);
+      showToast("Fetching records...");
 
       const contract = await getContract(false);
       const data = await contract.viewRecords(patientAddress);
@@ -173,6 +179,7 @@ export default function DoctorPage() {
       }));
 
       addActivity(`Viewed ${formatted.length} records`);
+      showToast("Records fetched successfully ✅");
 
     } catch {
       setError("Failed to fetch records");
@@ -185,17 +192,16 @@ export default function DoctorPage() {
     return <LoadingOverlay show={true} />;
   }
 
+  // ✅ UPDATED UNAUTHORIZED HANDLING
   if (authorized === false) {
-    return <AccessDenied role="doctor" />;
+    return <UnauthorizedPage />;
   }
 
   return (
     <div className="flex">
 
-      {/* ✅ SIDEBAR */}
       <Sidebar />
 
-      {/* ✅ MAIN PAGE */}
       <div className="flex-1 min-h-screen flex flex-col bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-900 dark:to-black p-6">
 
         <LoadingOverlay show={loading} />
@@ -206,20 +212,16 @@ export default function DoctorPage() {
 
           {/* HEADER */}
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold">Doctor</h1>
-            <button
-              onClick={() => { clearSession(); location.reload(); }}
-              className="text-red-500"
-            >
-              Logout
-            </button>
+            <h1 className="text-3xl font-bold dark:text-white">Doctor</h1>
           </div>
 
           {/* WALLET */}
           <div className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white p-5 rounded-xl shadow flex justify-between items-center">
             <div>
               <p className="text-sm opacity-80">Connected Wallet</p>
-              <p className="font-mono text-sm break-all">{account}</p>
+              <p className="font-mono text-sm break-all">
+                {shortenAddress(account)}
+              </p>
             </div>
 
             <button
@@ -325,12 +327,6 @@ export default function DoctorPage() {
           </div>
 
         </div>
-
-        {/* FOOTER */}
-        <footer className="bg-black text-white text-center py-4 mt-10 rounded-xl">
-          © 2026 MedTrack • Secure Healthcare on Blockchain
-        </footer>
-
       </div>
     </div>
   );

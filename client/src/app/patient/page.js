@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; // ✅ ADDED
 import Sidebar from "../../components/layout/Sidebar";
 import { getContract } from "../../web3/contract";
 import { encryptData } from "../../utils/encryption";
 import { uploadToIPFS } from "../../web3/ipfs";
 import { checkUserRole } from "../../lib/auth";
-import { clearSession } from "../../lib/session";
 
 /* 🔔 TOAST */
 function Toast({ toast }) {
@@ -25,8 +25,10 @@ function Skeleton() {
 }
 
 export default function PatientPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  const router = useRouter(); // ✅ ADDED
+
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [account, setAccount] = useState(null);
   const [file, setFile] = useState(null);
   const [records, setRecords] = useState([]);
@@ -36,19 +38,23 @@ export default function PatientPage() {
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
   const [sortOrder, setSortOrder] = useState("newest");
-  const [notifications, setNotifications] = useState([]);
+
+  const [doctorAddress, setDoctorAddress] = useState("");
+  const [requests, setRequests] = useState([]);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 4;
 
   useEffect(() => {
     init();
-
-    if (window.ethereum) {
-      window.ethereum.on("accountsChanged", init);
-    }
-
-    return () => {
-      window.ethereum?.removeListener("accountsChanged", init);
-    };
   }, []);
+
+  // ✅ ADDED: redirect when unauthorized
+  useEffect(() => {
+    if (authorized === false) {
+      router.push("/unauthorized");
+    }
+  }, [authorized]);
 
   function showToast(msg, type = "success") {
     setToast({ msg, type });
@@ -71,6 +77,7 @@ export default function PatientPage() {
       setAuthorized(true);
       fetchDoctors(acc);
       fetchRecords();
+      fetchRequests();
 
     } catch {
       setAuthorized(false);
@@ -83,37 +90,58 @@ export default function PatientPage() {
     try {
       const contract = await getContract(false);
       const docs = await contract.getAuthorizedDoctors(acc);
-      setDoctorList(docs.map(d => ({ address: d })));
+      setDoctorList(docs);
     } catch {
       setDoctorList([]);
     }
   }
 
-  // ✅ SAFE FETCH (fixes 0x error)
   async function fetchRecords() {
     try {
       const contract = await getContract(false);
       const data = await contract.viewMyRecords();
 
-      if (!data || data.length === 0) {
-        setRecords([]);
-        return;
-      }
-
       let sorted = [...data];
-
-      if (sortOrder === "newest") {
-        sorted.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
-      } else {
-        sorted.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
-      }
+      sorted.sort((a, b) =>
+        sortOrder === "newest"
+          ? Number(b.timestamp) - Number(a.timestamp)
+          : Number(a.timestamp) - Number(b.timestamp)
+      );
 
       setRecords(sorted);
+      setCurrentPage(1);
 
-    } catch (err) {
-      console.error(err);
+    } catch {
       setRecords([]);
-      showToast("No records found", "error");
+    }
+  }
+
+  async function fetchRequests() {
+    try {
+      const contract = await getContract(false);
+      if (!contract.getAccessRequests) return;
+
+      const req = await contract.getAccessRequests();
+      setRequests(req);
+
+    } catch {
+      setRequests([]);
+    }
+  }
+
+  async function approveRequest(addr) {
+    try {
+      const contract = await getContract(true);
+      if (!contract.approveRequest) return;
+
+      const tx = await contract.approveRequest(addr);
+      await tx.wait();
+
+      showToast("Approved ✅");
+      fetchRequests();
+
+    } catch {
+      showToast("Failed", "error");
     }
   }
 
@@ -131,8 +159,6 @@ export default function PatientPage() {
       await tx.wait();
 
       showToast("Uploaded 🚀");
-      setNotifications(prev => ["New record uploaded", ...prev]);
-
       fetchRecords();
 
     } catch {
@@ -142,10 +168,31 @@ export default function PatientPage() {
     }
   }
 
+  async function grantAccess() {
+    try {
+      const contract = await getContract(true);
+      const tx = await contract.grantAccess(doctorAddress);
+      await tx.wait();
+
+      showToast("Access Granted");
+      fetchDoctors(account);
+
+    } catch {
+      showToast("Failed", "error");
+    }
+  }
+
+  const totalPages = Math.ceil(records.length / recordsPerPage);
+
+  const currentRecords = records.slice(
+    (currentPage - 1) * recordsPerPage,
+    currentPage * recordsPerPage
+  );
+
   if (initLoading) {
     return (
       <div className="flex">
-        <Sidebar onToggle={setSidebarOpen} />
+        <Sidebar />
         <div className="flex-1 p-6 space-y-3">
           <Skeleton /><Skeleton /><Skeleton />
         </div>
@@ -153,79 +200,76 @@ export default function PatientPage() {
     );
   }
 
+  // ✅ REPLACED (no UI flash, redirect handles it)
   if (authorized === false) {
-    return (
-      <div className="flex">
-        <Sidebar onToggle={setSidebarOpen} />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-xl shadow text-center">
-            <h2 className="text-red-500 text-xl font-bold">Access Denied</h2>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
 
-      <Sidebar onToggle={setSidebarOpen} />
+      <Sidebar />
 
-      <div className="flex-1 p-6 transition-all duration-300">
+      <div className="flex-1 p-6 text-black dark:text-white">
 
         <Toast toast={toast} />
 
-        {/* ✅ CLEAN HEADER */}
+        {/* HEADER */}
         <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-bold">Patient</h1>
-            <p className="text-sm text-gray-500">
-              Manage your medical records securely
-            </p>
-          </div>
+          <h1 className="text-2xl font-bold">Patient</h1>
+        </div>
+
+        {/* DOCTOR ACCESS */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow mb-6">
+          <h2 className="font-semibold mb-2">Give Doctor Access</h2>
+
+          <input
+            type="text"
+            placeholder="Doctor Address"
+            value={doctorAddress}
+            onChange={(e) => setDoctorAddress(e.target.value)}
+            className="border p-2 mr-2 rounded text-black"
+          />
 
           <button
-            onClick={() => {
-              clearSession();
-              location.reload();
-            }}
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+            onClick={grantAccess}
+            className="bg-green-500 text-white px-4 py-2 rounded"
           >
-            Logout
+            Grant
           </button>
         </div>
 
-        {/* 🔔 NOTIFICATIONS */}
-        <div className="mb-4">
-          <h2 className="font-semibold mb-2">Notifications 🔔</h2>
-          <div className="bg-white p-3 rounded shadow text-sm">
-            {notifications.length === 0 ? "No notifications" :
-              notifications.map((n, i) => <p key={i}>• {n}</p>)
-            }
+        {/* REQUESTS */}
+        {requests.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 p-4 rounded shadow mb-6">
+            <h2 className="font-semibold mb-2">Doctor Requests</h2>
+
+            {requests.map((addr, i) => (
+              <div key={i} className="flex justify-between mb-2">
+                <span>{addr}</span>
+                <button
+                  onClick={() => approveRequest(addr)}
+                  className="bg-blue-500 text-white px-2 py-1 rounded"
+                >
+                  Accept
+                </button>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
 
-        {/* 📊 STATS */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-blue-100 p-4 rounded">Records: {records.length}</div>
-          <div className="bg-green-100 p-4 rounded">Doctors: {doctorList.length}</div>
-        </div>
-
-        {/* 🔽 SORT */}
+        {/* SORT */}
         <select
           value={sortOrder}
-          onChange={(e) => {
-            setSortOrder(e.target.value);
-            fetchRecords();
-          }}
-          className="mb-4 border p-2 rounded"
+          onChange={(e) => setSortOrder(e.target.value)}
+          className="mb-4 border border-gray-300 dark:border-gray-600 p-2 rounded bg-white text-black dark:bg-gray-800 dark:text-white"
         >
           <option value="newest">Newest First</option>
           <option value="oldest">Oldest First</option>
         </select>
 
-        {/* 📤 UPLOAD */}
-        <div className="bg-white p-4 rounded shadow mb-6">
+        {/* UPLOAD */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow mb-6">
           <input type="file" onChange={(e) => setFile(e.target.files[0])} />
           <button
             onClick={uploadRecord}
@@ -235,13 +279,13 @@ export default function PatientPage() {
           </button>
         </div>
 
-        {/* 📂 RECORDS */}
+        {/* RECORDS */}
         <div className="space-y-3">
-          {records.length === 0 ? (
+          {currentRecords.length === 0 ? (
             <p className="text-gray-400">No records</p>
           ) : (
-            records.map((r, i) => (
-              <div key={i} className="bg-white p-4 rounded shadow">
+            currentRecords.map((r, i) => (
+              <div key={i} className="bg-white dark:bg-gray-800 p-4 rounded shadow">
                 <p className="font-semibold">{r.fileName}</p>
                 <p className="text-sm text-gray-500">
                   {r.fileType?.includes("pdf") ? "PDF 📄" : "Image 🖼️"}
@@ -251,10 +295,18 @@ export default function PatientPage() {
           )}
         </div>
 
-        {/* FOOTER */}
-        <footer className="bg-black text-white text-center py-3 mt-10 rounded">
-          © 2026 MedTrack
-        </footer>
+        {/* PAGINATION */}
+        {totalPages > 1 && (
+          <div className="flex justify-center gap-2 mt-6">
+            <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+              className="px-3 py-1 bg-blue-500 text-white rounded">Prev</button>
+
+            <span>Page {currentPage} / {totalPages}</span>
+
+            <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+              className="px-3 py-1 bg-blue-500 text-white rounded">Next</button>
+          </div>
+        )}
 
       </div>
     </div>

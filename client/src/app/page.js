@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Footer from "../components/Footer";
 import Sidebar from "../components/layout/sidebar";
 
-/* 🔔 TOAST */
+/* 🔔 TOAST (only after wallet connect) */
 function Toast({ message, show }) {
   if (!show) return null;
 
@@ -15,7 +15,7 @@ function Toast({ message, show }) {
   );
 }
 
-/* ⏳ LOADING OVERLAY */
+/* ⏳ LOADING */
 function LoadingOverlay({ show }) {
   if (!show) return null;
 
@@ -28,7 +28,7 @@ function LoadingOverlay({ show }) {
   );
 }
 
-/* ⚠️ ERROR UI */
+/* ⚠️ ERROR */
 function ErrorUI({ message }) {
   if (!message) return null;
 
@@ -41,40 +41,54 @@ function ErrorUI({ message }) {
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
-  const [showToast, setShowToast] = useState(false);
   const [error, setError] = useState(null);
+
+  // 🔥 Toast state (only for wallet connect)
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
   useEffect(() => {
     setTimeout(() => {
       try {
         setLoading(false);
-        setShowToast(true);
-        setTimeout(() => setShowToast(false), 3000);
-      } catch (err) {
+      } catch {
         setError("Something went wrong!");
       }
     }, 1000);
   }, []);
 
+  // 🔥 Triggered from Sidebar
+  const handleConnect = (isNew) => {
+    if (isNew) {
+      setToastMessage("New wallet connected 🎉");
+    } else {
+      setToastMessage("Welcome back 👋");
+    }
+
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
   return (
     <div className="flex">
 
-      {/* ✅ SIDEBAR */}
-      <Sidebar />
+      {/* SIDEBAR */}
+      <Sidebar onConnect={handleConnect} />
 
-      {/* ✅ MAIN PAGE */}
-      <div className="flex-1 min-h-screen flex flex-col bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 text-black dark:text-white transition-all">
+      {/* MAIN */}
+      <div className="flex-1 min-h-screen flex flex-col 
+        bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 
+        dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 
+        text-black dark:text-white transition-all">
 
         <LoadingOverlay show={loading} />
-        <Toast message="Welcome to MedTrack 🚀" show={showToast} />
         <ErrorUI message={error} />
+        <Toast message={toastMessage} show={showToast} />
 
-        {/* MAIN CONTENT */}
         <div className="flex flex-col items-center flex-grow px-6 py-10">
 
-          {/* HERO SECTION */}
+          {/* HERO */}
           <div className="flex flex-col md:flex-row items-center justify-between gap-10 max-w-6xl w-full">
-
             <div className="max-w-xl">
               <h1 className="text-4xl md:text-5xl font-extrabold mb-6">
                 Smart Healthcare Management System
@@ -127,22 +141,28 @@ export default function Home() {
 
           {/* FEATURES */}
           <div className="grid md:grid-cols-3 gap-6 mt-16 max-w-6xl w-full">
-            <div className="bg-white/70 p-6 rounded-2xl shadow-lg text-center">
+            <div className="bg-white/70 dark:bg-gray-800/70 p-6 rounded-2xl shadow-lg text-center">
               <img src="images.png" className="w-16 mx-auto mb-4" />
               <h3 className="font-semibold mb-2 text-lg">🔐 Secure Data</h3>
-              <p className="text-sm text-gray-600">Patient data is protected using blockchain.</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Patient data is protected using blockchain.
+              </p>
             </div>
 
-            <div className="bg-white/70 p-6 rounded-2xl shadow-lg text-center">
+            <div className="bg-white/70 dark:bg-gray-800/70 p-6 rounded-2xl shadow-lg text-center">
               <img src="images (1).png" className="w-16 mx-auto mb-4" />
               <h3 className="font-semibold mb-2 text-lg">⚡ Fast Access</h3>
-              <p className="text-sm text-gray-600">Doctors can quickly access records.</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Doctors can quickly access records.
+              </p>
             </div>
 
-            <div className="bg-white/70 p-6 rounded-2xl shadow-lg text-center">
+            <div className="bg-white/70 dark:bg-gray-800/70 p-6 rounded-2xl shadow-lg text-center">
               <img src="images(2).jpg" className="w-16 mx-auto mb-4" />
               <h3 className="font-semibold mb-2 text-lg">📊 Smart Tracking</h3>
-              <p className="text-sm text-gray-600">Track medical history easily.</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Track medical history easily.
+              </p>
             </div>
           </div>
 
@@ -151,30 +171,27 @@ export default function Home() {
             <h2 className="text-3xl font-bold mb-10">How MedTrack Works</h2>
 
             <div className="grid md:grid-cols-3 gap-8">
-              <div className="p-6 rounded-2xl bg-white/60 backdrop-blur-lg shadow">
+              <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 shadow">
                 <h3 className="font-semibold text-lg mb-2 text-blue-600">1. Connect Wallet</h3>
-                <p className="text-sm text-gray-600">Secure login using blockchain wallet.</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Secure login using blockchain wallet.
+                </p>
               </div>
 
-              <div className="p-6 rounded-2xl bg-white/60 backdrop-blur-lg shadow">
+              <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 shadow">
                 <h3 className="font-semibold text-lg mb-2 text-blue-600">2. Manage Records</h3>
-                <p className="text-sm text-gray-600">Upload and control medical data.</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Upload and control medical data.
+                </p>
               </div>
 
-              <div className="p-6 rounded-2xl bg-white/60 backdrop-blur-lg shadow">
+              <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 shadow">
                 <h3 className="font-semibold text-lg mb-2 text-blue-600">3. Secure Access</h3>
-                <p className="text-sm text-gray-600">Doctors access data with permission.</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Doctors access data with permission.
+                </p>
               </div>
             </div>
-          </div>
-
-          {/* WHY */}
-          <div className="mt-20 max-w-5xl text-center">
-            <h2 className="text-3xl font-bold mb-4">Why Choose MedTrack?</h2>
-            <p className="text-gray-600">
-              MedTrack leverages blockchain to eliminate data tampering, ensure
-              patient privacy, and create a secure healthcare ecosystem.
-            </p>
           </div>
 
           {/* MODULES */}
@@ -196,18 +213,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* TRUST */}
-          <div className="mt-20 w-full py-6 border-t text-center">
-            <p className="text-sm">
-              Built with Blockchain • End-to-End Encryption • Privacy First
-            </p>
-          </div>
-
         </div>
-
-        {/* FOOTER */}
-        <Footer />
-
       </div>
     </div>
   );
