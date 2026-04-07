@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../../components/layout/Sidebar";
 import { getContract } from "../../web3/contract";
 import { encryptData } from "../../utils/encryption";
 import { uploadToIPFS } from "../../web3/ipfs";
 import { checkUserRole } from "../../lib/auth";
+import { getIPFSUrl } from '../../utils/ipfsGateway';
+import FileViewer from '../../components/FileViewer';
 
 /* 🔔 TOAST */
 function Toast({ toast }) {
@@ -19,10 +21,22 @@ function Toast({ toast }) {
   );
 }
 
+/* ⏳ LOADING OVERLAY */
+function LoadingOverlay({ show }) {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 bg-white/60 dark:bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="animate-pulse text-lg font-semibold">
+        Loading...
+      </div>
+    </div>
+  );
+}
+
 export default function PatientPage() {
 
   const router = useRouter();
-  const runningRef = useRef(false); // 🔥 prevent duplicate runs
 
   const [account, setAccount] = useState(null);
   const [file, setFile] = useState(null);
@@ -56,21 +70,11 @@ export default function PatientPage() {
     setTimeout(() => setToast(null), 2500);
   }
 
-  function resetState() {
-    setAccount(null);
-    setAuthorized(null);
-    setRecords([]);
-    setDoctorList([]);
-    setDoctorAddress("");
-    setCurrentPage(1);
-  }
-
   /* ================= INIT ================= */
 
   async function init() {
     try {
-      // 🔥 HARD RESET
-      resetState();
+      setAuthLoading(true);
 
       if (!window.ethereum) {
         setAuthorized(false);
@@ -102,34 +106,37 @@ export default function PatientPage() {
       await fetchRecords();
 
     } catch (err) {
-      console.error(err);
+      console.error("Init error:", err);
       setAuthorized(false);
     } finally {
       setAuthLoading(false);
     }
   }
 
+  /* ================= HANDLE WALLET CHANGE ================= */
+  
+  const handleAccountsChanged = async (accounts) => {
+    console.log("🔄 Patient: Account changed, reloading page...");
+    // Force a hard reload of the page
+    window.location.reload();
+  };
+
   /* ================= EFFECT ================= */
 
   useEffect(() => {
+    // Initial load
+    init();
 
-    const handleWalletChange = async () => {
-      if (runningRef.current) return;
-      runningRef.current = true;
+    // Listen for wallet changes
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", handleAccountsChanged);
+    }
 
-      setAuthLoading(true);
-
-      await init();
-
-      runningRef.current = false;
-    };
-
-    handleWalletChange(); // initial load
-
-    window.addEventListener("walletChanged", handleWalletChange);
-
+    // Cleanup listener
     return () => {
-      window.removeEventListener("walletChanged", handleWalletChange);
+      if (window.ethereum) {
+        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      }
     };
   }, []);
 
@@ -139,7 +146,7 @@ export default function PatientPage() {
     if (!authLoading && authorized === false) {
       router.push("/unauthorized");
     }
-  }, [authLoading, authorized]);
+  }, [authLoading, authorized, router]);
 
   /* ================= FETCH ================= */
 
@@ -147,8 +154,9 @@ export default function PatientPage() {
     try {
       const contract = await getContract(false);
       const docs = await contract.getAuthorizedDoctors(acc);
-      setDoctorList([...docs]); // 🔥 force re-render
-    } catch {
+      setDoctorList([...docs]);
+    } catch (error) {
+      console.error("Fetch doctors error:", error);
       setDoctorList([]);
     }
   }
@@ -157,9 +165,18 @@ export default function PatientPage() {
     try {
       const contract = await getContract(false);
       const data = await contract.viewMyRecords();
-      setRecords([...data]); // 🔥 force re-render
+      
+      const formatted = data.map(r => ({
+        hash: r.ipfsHash,
+        fileType: r.fileType,
+        fileName: r.fileName,
+        timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
+      }));
+      
+      setRecords(formatted);
       setCurrentPage(1);
-    } catch {
+    } catch (error) {
+      console.error("Fetch records error:", error);
       setRecords([]);
     }
   }
@@ -186,7 +203,8 @@ export default function PatientPage() {
 
       await fetchRecords();
 
-    } catch {
+    } catch (error) {
+      console.error("Upload error:", error);
       showToast("Upload failed", "error");
     } finally {
       setUploading(false);
@@ -194,16 +212,23 @@ export default function PatientPage() {
   }
 
   async function grantAccess(addr) {
+    if (!addr) {
+      showToast("Please enter doctor address", "error");
+      return;
+    }
+    
     try {
       const contract = await getContract(true);
       const tx = await contract.grantAccess(addr);
       await tx.wait();
 
-      showToast("Granted ✅");
+      showToast("Access Granted ✅");
+      setDoctorAddress(""); // Clear input
       await fetchDoctors(account);
 
-    } catch {
-      showToast("Failed", "error");
+    } catch (error) {
+      console.error("Grant access error:", error);
+      showToast("Failed to grant access", "error");
     }
   }
 
@@ -213,11 +238,12 @@ export default function PatientPage() {
       const tx = await contract.revokeAccess(addr);
       await tx.wait();
 
-      showToast("Revoked ❌");
+      showToast("Access Revoked ❌");
       await fetchDoctors(account);
 
-    } catch {
-      showToast("Failed", "error");
+    } catch (error) {
+      console.error("Revoke access error:", error);
+      showToast("Failed to revoke access", "error");
     }
   }
 
@@ -237,7 +263,7 @@ export default function PatientPage() {
       <div className="flex min-h-screen">
         <Sidebar />
         <div className="flex-1 flex items-center justify-center">
-          Checking access...
+          <LoadingOverlay show={true} />
         </div>
       </div>
     );
@@ -246,7 +272,7 @@ export default function PatientPage() {
   /* ================= UI ================= */
 
   return (
-    <div key={account} className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
 
       <Sidebar />
 
@@ -254,7 +280,7 @@ export default function PatientPage() {
 
         <Toast toast={toast} />
 
-        <h1 className="text-2xl font-bold mb-4">Patient</h1>
+        <h1 className="text-3xl font-bold mb-6">Patient Dashboard</h1>
 
         {account && (
           <div className="sticky top-4 z-40 mb-6">
@@ -262,11 +288,14 @@ export default function PatientPage() {
                             text-white px-6 py-3 rounded-xl shadow-lg
                             flex justify-between items-center">
 
-              <span>{formatAddress(account)}</span>
+              <div>
+                <p className="text-xs opacity-80">Connected Wallet</p>
+                <span className="font-mono">{formatAddress(account)}</span>
+              </div>
 
               <button
                 onClick={() => copyAddress(account)}
-                className="bg-white text-blue-600 px-4 py-1 rounded"
+                className="bg-white text-blue-600 px-4 py-1 rounded hover:bg-gray-100 transition"
               >
                 Copy
               </button>
@@ -275,78 +304,122 @@ export default function PatientPage() {
         )}
 
         {/* DOCTOR ACCESS */}
-        <div className="bg-white p-6 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-4">Give Doctor Access</h2>
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
+          <h2 className="font-semibold mb-4 text-xl">Grant Doctor Access</h2>
 
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <input
               value={doctorAddress}
               onChange={(e) => setDoctorAddress(e.target.value)}
-              className="flex-1 border p-3 rounded text-black"
+              placeholder="Enter doctor's wallet address"
+              className="flex-1 border p-3 rounded text-black dark:text-white dark:bg-gray-700"
             />
 
             <button
               onClick={() => grantAccess(doctorAddress)}
-              className="bg-green-500 text-white px-6 py-3 rounded"
+              className="bg-green-500 text-white px-6 py-3 rounded hover:bg-green-600 transition"
             >
-              Grant
+              Grant Access
             </button>
           </div>
         </div>
 
         {/* DOCTOR LIST */}
-        <div className="bg-white p-4 rounded shadow mb-6">
-          <h2 className="font-semibold mb-2">Authorized Doctors</h2>
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
+          <h2 className="font-semibold mb-4 text-xl">Authorized Doctors</h2>
 
           {doctorList.length === 0 ? (
-            <p>No doctors</p>
+            <p className="text-gray-500 text-center py-4">No doctors have access to your records yet</p>
           ) : (
-            doctorList.map((addr, i) => (
-              <div key={i} className="flex justify-between mb-2">
-                <span>{addr}</span>
-                <button
-                  onClick={() => revokeAccess(addr)}
-                  className="bg-red-500 px-2 py-1 text-white rounded"
-                >
-                  Revoke
-                </button>
+            <div className="space-y-3">
+              {doctorList.map((addr, i) => (
+                <div key={i} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <span className="font-mono text-sm break-all flex-1 mr-3">{addr}</span>
+                  <button
+                    onClick={() => revokeAccess(addr)}
+                    className="bg-red-500 px-3 py-1 text-white rounded hover:bg-red-600 transition whitespace-nowrap"
+                  >
+                    Revoke Access
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* UPLOAD */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
+          <h2 className="font-semibold mb-4 text-xl">Upload Medical Record</h2>
+          
+          <div className="flex flex-col sm:flex-row gap-4">
+            <input 
+              id="fileInput" 
+              type="file"
+              onChange={(e) => setFile(e.target.files[0])}
+              className="flex-1 border p-2 rounded bg-white dark:bg-gray-700"
+            />
+
+            <button
+              onClick={uploadRecord}
+              disabled={uploading}
+              className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition disabled:opacity-50"
+            >
+              {uploading ? "Uploading..." : "Upload Record"}
+            </button>
+          </div>
+        </div>
+
+        {/* RECORDS */}
+        <div className="space-y-4">
+          <h2 className="font-semibold text-2xl">My Medical Records</h2>
+          
+          {currentRecords.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow text-center text-gray-500">
+              No records found. Upload your first medical record!
+            </div>
+          ) : (
+            currentRecords.map((rec, i) => (
+              <div key={i} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
+                <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
+                  <p className="font-semibold text-lg">{rec.fileName}</p>
+                  <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                    {rec.fileType.includes('pdf') ? 'PDF Document' : 'Image File'}
+                  </span>
+                </div>
+
+                <p className="text-sm text-gray-500 mb-3">
+                  Uploaded: {rec.timestamp}
+                </p>
+
+                <FileViewer
+                  url={getIPFSUrl(rec.hash)}
+                  fileType={rec.fileType}
+                />
               </div>
             ))
           )}
         </div>
 
-        {/* UPLOAD */}
-        <div className="bg-white p-4 rounded shadow mb-6">
-          <input id="fileInput" type="file"
-            onChange={(e) => setFile(e.target.files[0])} />
-
-          <button
-            onClick={uploadRecord}
-            className="bg-blue-500 text-white px-4 py-2 ml-2 rounded"
-          >
-            {uploading ? "Uploading..." : "Upload"}
-          </button>
-        </div>
-
-        {/* RECORDS */}
-        {currentRecords.map((r, i) => (
-          <div key={i} className="bg-white p-4 rounded shadow mb-2">
-            {r.fileName}
-          </div>
-        ))}
-
         {/* PAGINATION */}
         {totalPages > 1 && (
           <div className="flex justify-center gap-3 mt-6">
-            <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-              className="bg-blue-500 px-3 py-1 text-white rounded">
-              Prev
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+              disabled={currentPage === 1}
+              className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 transition disabled:opacity-50"
+            >
+              Previous
             </button>
 
-            <span>{currentPage}/{totalPages}</span>
+            <span className="px-4 py-2">
+              Page {currentPage} of {totalPages}
+            </span>
 
-            <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-              className="bg-blue-500 px-3 py-1 text-white rounded">
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 transition disabled:opacity-50"
+            >
               Next
             </button>
           </div>
