@@ -7,7 +7,7 @@ import { ethers } from "ethers";
 const SESSION_TIME = 30 * 60 * 1000;
 
 export default function Sidebar({ onConnect }) {
-  const [open, setOpen] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -74,99 +74,91 @@ export default function Sidebar({ onConnect }) {
   };
 
   return (
-    <div
-      className={`${
-        open ? "w-64" : "w-20"
-      } h-fit bg-gradient-to-b from-gray-900 to-gray-950 text-white p-4 rounded-2xl shadow-lg transition-all duration-300 flex flex-col justify-between`}
-    >
-      {/* TOP */}
-      <div>
-        {/* Toggle */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="mb-6 flex flex-col justify-center items-center gap-1 w-10 h-10 bg-gray-700 hover:bg-gray-600 rounded"
-        >
-          <span className={`block h-0.5 w-5 bg-white ${open ? "rotate-45 translate-y-1.5" : ""}`}></span>
-          <span className={`block h-0.5 w-5 bg-white ${open ? "opacity-0" : ""}`}></span>
-          <span className={`block h-0.5 w-5 bg-white ${open ? "-rotate-45 -translate-y-1.5" : ""}`}></span>
-        </button>
+    <>
+      {/* 🔥 OVERLAY (only when expanded) */}
+      {expanded && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40"
+          onClick={() => setExpanded(false)}
+        />
+      )}
 
-        {/* Menu */}
-        <div className="flex flex-col gap-4 items-start">
+      <div
+        className={`fixed top-0 left-0 z-50 h-screen bg-gradient-to-b from-gray-900 to-gray-950 text-white p-3
+        shadow-lg flex flex-col justify-between transition-all duration-300
+        ${expanded ? "w-64" : "w-16"}`}
+      >
+        {/* TOP */}
+        <div>
+          {/* Burger */}
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="mb-6 w-10 h-10 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded"
+          >
+            ☰
+          </button>
 
-          <Link href="/" className="hover:text-blue-400 w-full">
-            🏠 {open && "Home"}
-          </Link>
+          {/* Menu */}
+          <div className="flex flex-col gap-4 text-sm">
+            <Link href="/" className="flex items-center gap-2 hover:text-blue-400">
+              🏠 {expanded && "Home"}
+            </Link>
 
-          <Link href="/patient" className="hover:text-blue-400 w-full">
-            👤 {open && "Patient"}
-          </Link>
+            <Link href="/patient" className="flex items-center gap-2 hover:text-blue-400">
+              👤 {expanded && "Patient"}
+            </Link>
 
-          <Link href="/doctor" className="hover:text-blue-400 w-full">
-            🩺 {open && "Doctor"}
-          </Link>
+            <Link href="/doctor" className="flex items-center gap-2 hover:text-blue-400">
+              🩺 {expanded && "Doctor"}
+            </Link>
 
-          <Link href="/admin" className="hover:text-blue-400 w-full">
-            🛠 {open && "Admin"}
-          </Link>
+            <Link href="/admin" className="flex items-center gap-2 hover:text-blue-400">
+              🛠 {expanded && "Admin"}
+            </Link>
+          </div>
+        </div>
 
+        {/* BOTTOM */}
+        <div>
+          {!wallet ? (
+            <button
+              onClick={connectWallet}
+              disabled={loading}
+              className={`flex items-center justify-center rounded-lg text-sm
+              ${expanded ? "w-full py-2" : "w-10 h-10"}
+              ${loading ? "bg-gray-600" : "bg-blue-600 hover:bg-blue-700"}`}
+            >
+              {loading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                expanded ? "🔗 Connect" : "🔗"
+              )}
+            </button>
+          ) : (
+            <div
+              className={`bg-gray-800 rounded-lg border border-gray-700 text-center
+              ${expanded ? "p-3" : "w-10 h-10 flex items-center justify-center"}`}
+            >
+              {expanded ? (
+                <>
+                  <p className="text-green-400 text-xs mb-1">● Connected</p>
+                  <p className="text-xs text-gray-400 mb-2">
+                    {shortenAddress(wallet)}
+                  </p>
+                  <button
+                    onClick={disconnectWallet}
+                    className="bg-red-500 hover:bg-red-600 px-2 py-1 rounded text-xs"
+                  >
+                    Disconnect
+                  </button>
+                </>
+              ) : (
+                <button onClick={disconnectWallet}>🔌</button>
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* BOTTOM */}
-      <div className="mt-6">
-
-        {!wallet ? (
-          <button
-            onClick={connectWallet}
-            disabled={loading}
-            className={`flex items-center justify-center gap-2
-            ${open ? "w-full px-3 py-2" : "w-10 h-10"} 
-            rounded-lg text-sm
-            ${
-              loading
-                ? "bg-gray-600"
-                : "bg-blue-600 hover:bg-blue-700"
-            }`}
-          >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <>🔗 {open && "Connect"}</>
-            )}
-          </button>
-        ) : (
-          <div
-            className={`bg-gray-800 rounded-lg shadow border border-gray-700
-            ${open ? "p-4 w-full text-center" : "w-10 h-10 flex items-center justify-center"}`}
-          >
-            {open ? (
-              <>
-                <p className="text-green-400 text-sm mb-2">● Connected</p>
-
-                <p className="text-xs text-gray-400 mb-3">
-                  {shortenAddress(wallet)}
-                </p>
-
-                <button
-                  onClick={disconnectWallet}
-                  className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-xs"
-                >
-                  Disconnect
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={disconnectWallet}
-                className="text-red-400 text-lg"
-              >
-                🔌
-              </button>
-            )}
-          </div>
-        )}
-
-      </div>
-    </div>
+    </>
   );
 }
