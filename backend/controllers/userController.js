@@ -1,7 +1,6 @@
 const User = require('../models/User');
 const { ethers } = require('ethers');
-
-// ✅ CREATE USER (FIXED + SAFE)
+// Create a new user or return existing one
 exports.createUser = async (req, res) => {
   try {
     let { address, role } = req.body;
@@ -10,10 +9,10 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: "Address required" });
     }
 
-    // ✅ NORMALIZE ADDRESS
+    // Address in lowercase for consistency
     address = address.toLowerCase();
 
-    // ✅ DEFAULT ROLE
+    // check if role is valid, if not default to "patient"
     if (!role) role = "patient";
 
     const existing = await User.findOne({ address });
@@ -37,7 +36,7 @@ exports.createUser = async (req, res) => {
   }
 };
 
-// ✅ GET USER
+//  GET USER
 exports.getUser = async (req, res) => {
   try {
     const user = await User.findOne({
@@ -55,7 +54,6 @@ exports.getUser = async (req, res) => {
   }
 };
 
-// ✅ GET ALL USERS
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find().sort({ createdAt: -1 });
@@ -66,13 +64,13 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
-// 🔐 VERIFY SIGNATURE (NOT USED YET BUT KEPT SAFE)
+//  VERIFY SIGNATURE 
 const verifySignature = (address, signature, message) => {
   const recoveredAddress = ethers.verifyMessage(message, signature);
   return recoveredAddress.toLowerCase() === address.toLowerCase();
 };
 
-// ✅ UPDATE ROLE
+// To UPDATE ROLE
 exports.updateUserRole = async (req, res) => {
   try {
     const { role } = req.body;

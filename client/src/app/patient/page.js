@@ -4,13 +4,12 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../../components/layout/Sidebar";
 import { getContract } from "../../web3/contract";
-import { encryptData } from "../../utils/encryption";
+import { encryptData, decryptData } from "../../utils/encryption";
 import { uploadToIPFS } from "../../web3/ipfs";
 import { checkUserRole } from "../../lib/auth";
 import { getIPFSUrl } from '../../utils/ipfsGateway';
 import FileViewer from '../../components/FileViewer';
 
-/* 🔔 TOAST */
 function Toast({ toast }) {
   if (!toast) return null;
   return (
@@ -21,7 +20,6 @@ function Toast({ toast }) {
   );
 }
 
-/* ⏳ LOADING OVERLAY */
 function LoadingOverlay({ show }) {
   if (!show) return null;
 
@@ -53,8 +51,7 @@ export default function PatientPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 4;
 
-  /* ================= HELPERS ================= */
-
+// Helpers
   function formatAddress(addr) {
     if (!addr) return "";
     return addr.slice(0, 4) + "..." + addr.slice(-4);
@@ -70,7 +67,7 @@ export default function PatientPage() {
     setTimeout(() => setToast(null), 2500);
   }
 
-  /* ================= INIT ================= */
+  //  INIT 
 
   async function init() {
     try {
@@ -113,26 +110,26 @@ export default function PatientPage() {
     }
   }
 
-  /* ================= HANDLE WALLET CHANGE ================= */
-  
+    // re-init instead rather than doing the reload 
   const handleAccountsChanged = async (accounts) => {
-    console.log("🔄 Patient: Account changed, reloading page...");
-    // Force a hard reload of the page
-    window.location.reload();
+    console.log("🔄 Patient: Account changed");
+
+    const newAcc = accounts[0];
+
+    setAuthorized(null); // reset UI
+    setAccount(newAcc);
+
+    await init(); // re-run full logic
   };
 
-  /* ================= EFFECT ================= */
 
   useEffect(() => {
-    // Initial load
     init();
 
-    // Listen for wallet changes
     if (window.ethereum) {
       window.ethereum.on("accountsChanged", handleAccountsChanged);
     }
 
-    // Cleanup listener
     return () => {
       if (window.ethereum) {
         window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
@@ -140,16 +137,14 @@ export default function PatientPage() {
     };
   }, []);
 
-  /* ================= REDIRECT ================= */
-
+// REDIRECT 
   useEffect(() => {
     if (!authLoading && authorized === false) {
       router.push("/unauthorized");
     }
   }, [authLoading, authorized, router]);
 
-  /* ================= FETCH ================= */
-
+// Fetch 
   async function fetchDoctors(acc) {
     try {
       const contract = await getContract(false);
@@ -165,14 +160,18 @@ export default function PatientPage() {
     try {
       const contract = await getContract(false);
       const data = await contract.viewMyRecords();
-      
-      const formatted = data.map(r => ({
-        hash: r.ipfsHash,
-        fileType: r.fileType,
-        fileName: r.fileName,
-        timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
-      }));
-      
+
+      const formatted = data.map(r => {
+        const decrypted = decryptData(r.ipfsHash);
+
+        return {
+          hash: decrypted,
+          fileType: r.fileType,
+          fileName: r.fileName,
+          timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
+        };
+      });
+
       setRecords(formatted);
       setCurrentPage(1);
     } catch (error) {
@@ -181,7 +180,6 @@ export default function PatientPage() {
     }
   }
 
-  /* ================= ACTIONS ================= */
 
   async function uploadRecord() {
     if (!file) return showToast("Select file", "error");
@@ -216,15 +214,23 @@ export default function PatientPage() {
       showToast("Please enter doctor address", "error");
       return;
     }
-    
+
     try {
       const contract = await getContract(true);
+
+      const exists = doctorList.some(d => d.toLowerCase() === addr.toLowerCase());
+      if (exists) {
+        return showToast("Already has access", "error");
+      }
+
       const tx = await contract.grantAccess(addr);
       await tx.wait();
 
       showToast("Access Granted ✅");
-      setDoctorAddress(""); // Clear input
-      await fetchDoctors(account);
+      setDoctorAddress("");
+
+      //   UI update
+      setDoctorList(prev => [...prev, addr]);
 
     } catch (error) {
       console.error("Grant access error:", error);
@@ -239,7 +245,11 @@ export default function PatientPage() {
       await tx.wait();
 
       showToast("Access Revoked ❌");
-      await fetchDoctors(account);
+
+      //  instant removal
+      setDoctorList(prev =>
+        prev.filter(d => d.toLowerCase() !== addr.toLowerCase())
+      );
 
     } catch (error) {
       console.error("Revoke access error:", error);
@@ -256,8 +266,7 @@ export default function PatientPage() {
     currentPage * recordsPerPage
   );
 
-  /* ================= LOADING ================= */
-
+// Loading & Unauthorized handling
   if (authLoading) {
     return (
       <div className="flex min-h-screen">
@@ -269,7 +278,6 @@ export default function PatientPage() {
     );
   }
 
-  /* ================= UI ================= */
 
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -283,10 +291,10 @@ export default function PatientPage() {
         <h1 className="text-3xl font-bold mb-6">Patient Dashboard</h1>
 
         {account && (
-          <div className="sticky top-4 z-40 mb-6">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 
-                            text-white px-6 py-3 rounded-xl shadow-lg
-                            flex justify-between items-center">
+          <div className="mb-6 w-full">
+            <div className="relative bg-gradient-to-r from-blue-500 to-indigo-600 
+                  text-white px-6 py-3 rounded-xl shadow-lg
+                  flex items-center justify-between">
 
               <div>
                 <p className="text-xs opacity-80">Connected Wallet</p>
@@ -294,8 +302,8 @@ export default function PatientPage() {
               </div>
 
               <button
-                onClick={() => copyAddress(account)}
-                className="bg-white text-blue-600 px-4 py-1 rounded hover:bg-gray-100 transition"
+                  onClick={() => copyAddress(account)}
+                  className="bg-white text-blue-600 px-4 py-1 rounded hover:bg-gray-100 transition shrink-0"
               >
                 Copy
               </button>
@@ -350,10 +358,10 @@ export default function PatientPage() {
         {/* UPLOAD */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
           <h2 className="font-semibold mb-4 text-xl">Upload Medical Record</h2>
-          
+
           <div className="flex flex-col sm:flex-row gap-4">
-            <input 
-              id="fileInput" 
+            <input
+              id="fileInput"
               type="file"
               onChange={(e) => setFile(e.target.files[0])}
               className="flex-1 border p-2 rounded bg-white dark:bg-gray-700"
@@ -372,7 +380,7 @@ export default function PatientPage() {
         {/* RECORDS */}
         <div className="space-y-4">
           <h2 className="font-semibold text-2xl">My Medical Records</h2>
-          
+
           {currentRecords.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow text-center text-gray-500">
               No records found. Upload your first medical record!
@@ -403,7 +411,7 @@ export default function PatientPage() {
         {/* PAGINATION */}
         {totalPages > 1 && (
           <div className="flex justify-center gap-3 mt-6">
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
               disabled={currentPage === 1}
               className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 transition disabled:opacity-50"
@@ -415,7 +423,7 @@ export default function PatientPage() {
               Page {currentPage} of {totalPages}
             </span>
 
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
               disabled={currentPage === totalPages}
               className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 transition disabled:opacity-50"

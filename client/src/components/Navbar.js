@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 export default function Navbar() {
   const [dark, setDark] = useState(false);
 
-  // ✅ Load saved theme
+  // Load saved theme
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "dark") {
@@ -17,7 +17,7 @@ export default function Navbar() {
     }
   }, []);
 
-  // ✅ Apply theme change
+  // To Apply theme change
   useEffect(() => {
     if (dark) {
       document.documentElement.classList.add("dark");

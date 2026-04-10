@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Footer from "../components/Footer";
-import Sidebar from "../components/layout/sidebar";
+import Sidebar from "../components/layout/Sidebar";
 
-/* 🔔 TOAST (only after wallet connect) */
+//  TOAST after wallet connect 
 function Toast({ message, show }) {
   if (!show) return null;
 
@@ -15,7 +15,6 @@ function Toast({ message, show }) {
   );
 }
 
-/* ⏳ LOADING */
 function LoadingOverlay({ show }) {
   if (!show) return null;
 
@@ -28,7 +27,6 @@ function LoadingOverlay({ show }) {
   );
 }
 
-/* ⚠️ ERROR */
 function ErrorUI({ message }) {
   if (!message) return null;
 
@@ -43,7 +41,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 🔥 Toast state (only for wallet connect)
+  //  Toast state (only for wallet connect)
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -57,7 +55,7 @@ export default function Home() {
     }, 1000);
   }, []);
 
-  // 🔥 Triggered from Sidebar
+  //  Sidebar Connect callback
   const handleConnect = (isNew) => {
     if (isNew) {
       setToastMessage("New wallet connected 🎉");

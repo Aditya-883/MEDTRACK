@@ -10,10 +10,8 @@ const {
 
 const { verifyToken, requireAdmin } = require('../middleware/authMiddleware');
 
-// ✅ NEW ROUTE (FIXES YOUR BUG)
 router.post('/register', createUser);
 
-// ✅ EXISTING ROUTES (UNCHANGED)
 router.post('/', createUser);
 router.get('/', getAllUsers);
 router.get('/:address', getUser);

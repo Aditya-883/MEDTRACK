@@ -27,7 +27,6 @@ export default function WalletListener() {
 
         console.log("🔥 Wallet Synced:", acc);
 
-        // 🔥 IMPORTANT: dispatch with value
         window.dispatchEvent(
           new CustomEvent("walletChanged", { detail: acc })
         );

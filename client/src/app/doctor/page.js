@@ -7,9 +7,8 @@ import { getIPFSUrl } from '../../utils/ipfsGateway';
 import FileViewer from '../../components/FileViewer';
 import { checkUserRole } from '../../lib/auth';
 import Sidebar from '../../components/layout/Sidebar';
-import UnauthorizedPage from '../unauthorized/page'; // ✅ UPDATED
+import UnauthorizedPage from '../unauthorized/page'; //
 
-/* 🔔 TOAST */
 function Toast({ message, show, type }) {
   if (!show) return null;
 
@@ -21,7 +20,6 @@ function Toast({ message, show, type }) {
   );
 }
 
-/* ⏳ LOADING OVERLAY */
 function LoadingOverlay({ show }) {
   if (!show) return null;
 
@@ -34,7 +32,6 @@ function LoadingOverlay({ show }) {
   );
 }
 
-/* ⚠️ ERROR UI */
 function ErrorUI({ message }) {
   if (!message) return null;
 
@@ -45,8 +42,7 @@ function ErrorUI({ message }) {
   );
 }
 
-/* 🔐 SHORT ADDRESS */
-function shortenAddress(addr) {
+  function shortenAddress(addr) {
   if (!addr) return '';
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
@@ -192,7 +188,7 @@ export default function DoctorPage() {
     return <LoadingOverlay show={true} />;
   }
 
-  // ✅ UPDATED UNAUTHORIZED HANDLING
+  // UNAUTHORIZED HANDLING
   if (authorized === false) {
     return <UnauthorizedPage />;
   }

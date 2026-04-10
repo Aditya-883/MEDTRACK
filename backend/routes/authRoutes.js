@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { ethers } = require('ethers');
 const User = require('../models/User');
 
-// 🔐 ADMIN LOGIN ONLY (signature)
+// signature for Admin Login only
 router.post('/login', async (req, res) => {
   try {
     const { address, signature } = req.body;

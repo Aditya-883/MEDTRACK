@@ -1,6 +1,6 @@
 const BASE_URL = "http://localhost:5000/api";
 
-// 🔐 ADMIN LOGIN ONLY (signature)
+//  ADMIN LOGIN ONLY (signature)
 export async function adminLogin() {
   const accounts = await window.ethereum.request({
     method: "eth_requestAccounts",
@@ -32,7 +32,7 @@ export async function adminLogin() {
   return data;
 }
 
-// ✅ NORMAL ROLE CHECK (NO SIGNATURE)
+//  NORMAL ROLE CHECK (NO SIGNATURE)
 export async function checkUserRole(address) {
   const res = await fetch(`${BASE_URL}/users/${address}`);
   

@@ -8,7 +8,7 @@ import { adminLogin, checkUserRole } from '../../lib/auth';
 import AccessDenied from '../../components/ui/AccessDenied';
 import Sidebar from '../../components/layout/Sidebar'; 
 
-/* 🔔 TOAST */
+
 function Toast({ message, show, type }) {
   if (!show) return null;
 
@@ -20,7 +20,6 @@ function Toast({ message, show, type }) {
   );
 }
 
-/* ⏳ LOADING */
 function LoadingOverlay({ show }) {
   if (!show) return null;
 
@@ -235,12 +234,12 @@ export default function AdminPage() {
     };
   }, [currentAccount]);
 
-  /* 📊 STATS */
+  /*  STATS */
   const totalAdmins = users.filter(u => u.role === 'admin').length;
   const totalDoctors = users.filter(u => u.role === 'doctor').length;
   const totalPatients = users.filter(u => u.role === 'patient').length;
 
-  /* 📄 PAGINATION */
+  /*  PAGINATION */
   const indexOfLast = currentPage * usersPerPage;
   const currentUsers = filteredUsers.slice(indexOfLast - usersPerPage, indexOfLast);
   const totalPages = Math.ceil(filteredUsers.length / usersPerPage);

@@ -75,7 +75,7 @@ export default function Sidebar({ onConnect }) {
 
   return (
     <>
-      {/* 🔥 OVERLAY (only when expanded) */}
+      {/*  OVERLAY (only when expanded) */}
       {expanded && (
         <div
           className="fixed inset-0 bg-black/40 z-40"

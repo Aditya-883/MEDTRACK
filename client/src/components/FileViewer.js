@@ -5,7 +5,7 @@ import { useState } from 'react';
 export default function FileViewer({ url, fileType }) {
   const [open, setOpen] = useState(false);
 
-  // ✅ FIXED DOWNLOAD (FORCE DOWNLOAD)
+  //  Download Handler
   const handleDownload = async () => {
     try {
       const response = await fetch(url);
@@ -27,7 +27,7 @@ export default function FileViewer({ url, fileType }) {
     }
   };
 
-  // 🖼️ IMAGE VIEW
+  // To view images
   if (fileType.startsWith("image")) {
     return (
       <div className="mt-3">
@@ -70,7 +70,7 @@ export default function FileViewer({ url, fileType }) {
     );
   }
 
-  // 📄 PDF VIEW
+  // To view PDF
   if (fileType === "application/pdf") {
     return (
       <div className="mt-3">
@@ -100,7 +100,6 @@ export default function FileViewer({ url, fileType }) {
     );
   }
 
-  // 📁 DEFAULT
   return (
     <div className="mt-3 flex gap-2">
       <button

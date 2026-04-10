@@ -31,7 +31,7 @@ export default function RootLayout({ children }) {
           </main>
         </div>
 
-        {/* ✅ FIXED FOOTER (same as navbar logic) */}
+        {/*Footer*/}
         <div className="ml-16 w-[calc(100%-4rem)]">
           <Footer />
         </div>

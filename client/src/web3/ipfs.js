@@ -8,7 +8,7 @@ export const uploadToIPFS = async (file) => {
     if (!file) throw new Error("No file provided");
 
     const formData = new FormData();
-    formData.append("file", file); // ✅ REAL FILE upload
+    formData.append("file", file); 
 
     const res = await axios.post(
       "https://api.pinata.cloud/pinning/pinFileToIPFS",

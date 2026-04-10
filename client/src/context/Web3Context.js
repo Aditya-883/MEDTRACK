@@ -11,7 +11,7 @@ export const Web3Provider = ({ children }) => {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔌 CONNECT WALLET
+  //  CONNECT WALLET
   const connectWallet = async () => {
     try {
       if (typeof window === "undefined" || !window.ethereum) {
@@ -19,7 +19,7 @@ export const Web3Provider = ({ children }) => {
         return;
       }
 
-      // 👉 Switch network FIRST
+      //  Switch network FIRST
       await switchNetwork();
 
       const accounts = await window.ethereum.request({
@@ -32,7 +32,7 @@ export const Web3Provider = ({ children }) => {
 
       setAccount(addr);
 
-      // 👉 SET ROLE
+      // To Set ROLE
       const userRole = getRole(addr);
       console.log("Detected Role:", userRole);
 
@@ -43,7 +43,7 @@ export const Web3Provider = ({ children }) => {
     }
   };
 
-  // 🌐 SWITCH NETWORK
+  //  SWITCH NETWORK
   const switchNetwork = async () => {
     try {
       await window.ethereum.request({
@@ -67,7 +67,7 @@ export const Web3Provider = ({ children }) => {
     }
   };
 
-  // 🔄 CHECK EXISTING CONNECTION (ON LOAD)
+  //  CHECK EXISTING CONNECTION (ON LOAD)
   useEffect(() => {
     const checkConnection = async () => {
       try {
@@ -106,7 +106,7 @@ export const Web3Provider = ({ children }) => {
   );
 };
 
-// 🔁 CUSTOM HOOK
+//  CUSTOM HOOK
 export const useWeb3 = () => {
   const context = useContext(Web3Context);
 
