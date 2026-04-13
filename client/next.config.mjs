@@ -1,9 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "export",       // Static HTML export for GitHub Pages
-  trailingSlash: true,    // Required for GitHub Pages routing
+  output: "export",
+  trailingSlash: true,
+  basePath: "/MEDTRACK",        // ← add this
+  assetPrefix: "/MEDTRACK/",    // ← and this
   images: {
-    unoptimized: true,    // next/image optimization not available in static export
+    unoptimized: true,
   },
 };
 
