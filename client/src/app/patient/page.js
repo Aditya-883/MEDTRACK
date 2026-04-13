@@ -1,513 +1,201 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import Sidebar from "../../components/layout/Sidebar";
-import { getContract } from "../../web3/contract";
-import { encryptData, decryptData } from "../../utils/encryption";
-import { uploadToIPFS } from "../../web3/ipfs";
-import { checkUserRole } from "../../lib/auth";
-import { getIPFSUrl } from "../../utils/ipfsGateway";
-import FileViewer from "../../components/FileViewer";
+import { useState, useEffect } from "react";
+import Footer from "../components/Footer";
+import Sidebar from "../components/layout/Sidebar";
 
-// Upload stages
-const STAGES = {
-  idle:       { label: "Upload Record",        color: "bg-blue-500 hover:bg-blue-600" },
-  ipfs:       { label: "Uploading to IPFS…",   color: "bg-yellow-500 cursor-not-allowed" },
-  signing:    { label: "Confirm in MetaMask…", color: "bg-orange-500 cursor-not-allowed" },
-  mining:     { label: "Confirming on chain…", color: "bg-purple-500 cursor-not-allowed" },
-  success:    { label: "✓ Uploaded!",          color: "bg-green-500 cursor-not-allowed" },
-  error:      { label: "✗ Failed — Retry",     color: "bg-red-500 hover:bg-red-600" },
-};
+// basePath prefix for public assets on GitHub Pages
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
-// Toast
-function Toast({ toasts }) {
+function Toast({ message, show }) {
+  if (!show) return null;
   return (
-    <div className="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium
-            flex items-center gap-2 min-w-[260px] max-w-sm
-            transition-all duration-300 animate-slide-in
-            ${t.type === "error" ? "bg-red-500" : t.type === "success" ? "bg-green-600" : "bg-gray-800"}`}
-        >
-          <span className="text-lg leading-none">
-            {t.type === "error" ? "✗" : t.type === "success" ? "✓" : "ℹ"}
-          </span>
-          {t.msg}
-        </div>
-      ))}
+    <div className="fixed top-6 right-6 bg-black text-white px-4 py-2 rounded-lg shadow-lg z-50">
+      {message}
     </div>
   );
 }
 
-// ─── Upload progress bar ──────────────────────────────────────────
-function UploadProgress({ stage }) {
-  if (stage === "idle" || stage === "error") return null;
-
-  const steps = [
-    { key: "ipfs",    label: "IPFS Upload" },
-    { key: "signing", label: "MetaMask Sign" },
-    { key: "mining",  label: "On-chain Confirm" },
-    { key: "success", label: "Done" },
-  ];
-  const stageIndex = steps.findIndex((s) => s.key === stage);
-
+function LoadingOverlay({ show }) {
+  if (!show) return null;
   return (
-    <div className="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600">
-      <div className="flex items-center justify-between mb-2">
-        {steps.map((step, i) => {
-          const done = i < stageIndex || stage === "success";
-          const active = i === stageIndex && stage !== "success";
-          return (
-            <div key={step.key} className="flex flex-col items-center gap-1 flex-1">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500
-                ${done ? "bg-green-500 text-white" : active ? "bg-blue-500 text-white ring-4 ring-blue-200" : "bg-gray-200 dark:bg-gray-600 text-gray-400"}`}>
-                {done ? "✓" : active ? (
-                  <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
-                ) : i + 1}
-              </div>
-              <span className={`text-xs text-center leading-tight hidden sm:block
-                ${done ? "text-green-600 dark:text-green-400" : active ? "text-blue-600 dark:text-blue-400 font-semibold" : "text-gray-400"}`}>
-                {step.label}
-              </span>
-              {i < steps.length - 1 && (
-                <div className={`absolute hidden`} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {/* connector bar */}
-      <div className="relative h-1 bg-gray-200 dark:bg-gray-600 rounded-full mt-1 mx-3">
-        <div
-          className="absolute top-0 left-0 h-1 bg-blue-500 rounded-full transition-all duration-700"
-          style={{ width: stage === "success" ? "100%" : `${(stageIndex / (steps.length - 1)) * 100}%` }}
-        />
-      </div>
-      <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-3">
-        {stage === "ipfs"    && "Storing file on IPFS via Pinata…"}
-        {stage === "signing" && "Please open MetaMask and confirm the transaction."}
-        {stage === "mining"  && "Transaction submitted. Waiting for Sepolia confirmation (~15–30s)…"}
-        {stage === "success" && "Record is stored on the blockchain! ✅"}
-      </p>
+    <div className="fixed inset-0 bg-white/60 dark:bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="animate-pulse text-lg font-semibold">Loading...</div>
     </div>
   );
 }
 
-// ─── Loading screen ───────────────────────────────────────────────
-function LoadingSpinner() {
+function ErrorUI({ message }) {
+  if (!message) return null;
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-      <div className="text-center">
-        <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
-        <p className="text-gray-600 dark:text-gray-300">Checking access…</p>
-      </div>
+    <div className="fixed bottom-6 right-6 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+      {message}
     </div>
   );
 }
 
-function NotConnected({ onConnect }) {
-  return (
-    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
-      <Sidebar />
-      <div className="ml-16 flex-1 flex items-center justify-center">
-        <div className="text-center bg-white dark:bg-gray-800 p-10 rounded-2xl shadow-xl max-w-md w-full">
-          <div className="text-5xl mb-4">🔗</div>
-          <h2 className="text-2xl font-bold dark:text-white mb-2">Connect Your Wallet</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
-            Connect your MetaMask wallet to access the Patient Dashboard.
-          </p>
-          <button onClick={onConnect}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold transition">
-            Connect Wallet
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WrongRole({ role, address }) {
-  const router = useRouter();
-  const map = { admin: "/admin", doctor: "/doctor" };
-  return (
-    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
-      <Sidebar />
-      <div className="ml-16 flex-1 flex items-center justify-center">
-        <div className="text-center bg-white dark:bg-gray-800 p-10 rounded-2xl shadow-xl max-w-md w-full">
-          <div className="text-5xl mb-4">🚫</div>
-          <h2 className="text-2xl font-bold dark:text-white mb-2">Wrong Role</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-2">This page is for <strong>Patients</strong> only.</p>
-          <p className="text-sm text-gray-400 mb-6 font-mono">{address?.slice(0,6)}…{address?.slice(-4)} → <strong className="uppercase">{role}</strong></p>
-          <div className="flex gap-2 justify-center">
-            {map[role] && <button onClick={() => router.push(map[role])} className="bg-blue-500 text-white px-5 py-2 rounded-lg hover:bg-blue-600 transition">Go to {role} →</button>}
-            <button onClick={() => router.push("/")} className="bg-gray-200 dark:bg-gray-600 dark:text-white px-5 py-2 rounded-lg transition">Home</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main page ────────────────────────────────────────────────────
-export default function PatientPage() {
-  const router = useRouter();
-  const toastIdRef = useRef(0);
-
-  const [account, setAccount]         = useState(null);
-  const [userRole, setUserRole]       = useState(null);
-  const [file, setFile]               = useState(null);
-  const [records, setRecords]         = useState([]);
-  const [doctorList, setDoctorList]   = useState([]);
-  const [pageState, setPageState]     = useState("loading");
-  const [uploadStage, setUploadStage] = useState("idle");
-  const [toasts, setToasts]           = useState([]);
-  const [doctorAddress, setDoctorAddress] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const recordsPerPage = 4;
-
-  // ── Toast helpers ──
-  function addToast(msg, type = "info") {
-    const id = ++toastIdRef.current;
-    setToasts((prev) => [...prev, { id, msg, type }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
-  }
-
-  // ── Init ──
-  async function requestAndInit() {
-    try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      if (accounts?.length > 0) await init(accounts[0]);
-      else setPageState("notconnected");
-    } catch { setPageState("notconnected"); }
-  }
-
-  async function init(forcedAccount) {
-    try {
-      setPageState("loading");
-      if (!window.ethereum) { setPageState("notconnected"); return; }
-      let acc = forcedAccount;
-      if (!acc) {
-        const accounts = await window.ethereum.request({ method: "eth_accounts" });
-        acc = accounts?.[0];
-      }
-      if (!acc) { setPageState("notconnected"); return; }
-      setAccount(acc);
-      const user = await checkUserRole(acc);
-      if (!user) {
-        addToast("Cannot reach backend. Is the server running on port 5000?", "error");
-        setPageState("notconnected");
-        return;
-      }
-      setUserRole(user.role);
-      if (user.role !== "patient") { setPageState("wrongrole"); return; }
-      setPageState("ready");
-      await fetchDoctors(acc);
-      await fetchRecords();
-    } catch (err) {
-      console.error("Init error:", err);
-      addToast("Initialisation failed: " + err.message, "error");
-      setPageState("notconnected");
-    }
-  }
+export default function Home() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
   useEffect(() => {
-    init();
-    if (window.ethereum) {
-      const handleChange = () => window.location.reload();
-      window.ethereum.on("accountsChanged", handleChange);
-      return () => window.ethereum.removeListener("accountsChanged", handleChange);
-    }
+    setTimeout(() => {
+      try {
+        setLoading(false);
+      } catch {
+        setError("Something went wrong!");
+      }
+    }, 1000);
   }, []);
 
-  // ── Data fetchers ──
-  async function fetchDoctors(acc) {
-    try {
-      const contract = await getContract(false);
-      const docs = await contract.getAuthorizedDoctors(acc);
-      setDoctorList([...docs]);
-    } catch (err) {
-      console.error("Fetch doctors error:", err);
+  const handleConnect = (isNew) => {
+    if (isNew) {
+      setToastMessage("New wallet connected 🎉");
+    } else {
+      setToastMessage("Welcome back 👋");
     }
-  }
-
-  async function fetchRecords() {
-    try {
-      const contract = await getContract(false);
-      const data = await contract.viewMyRecords();
-      const formatted = data.map((r) => {
-        let hash = r.ipfsHash;
-        try { const d = decryptData(r.ipfsHash); if (d) hash = d; } catch {}
-        return {
-          hash,
-          fileType: r.fileType,
-          fileName: r.fileName,
-          timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
-        };
-      });
-      setRecords(formatted);
-      setCurrentPage(1);
-    } catch (err) {
-      console.error("Fetch records error:", err);
-    }
-  }
-
-  // ── Upload — staged ──
-  async function uploadRecord() {
-    if (!file) return addToast("Please select a file first", "error");
-    if (uploadStage !== "idle" && uploadStage !== "error") return;
-
-    let ipfsHash = null;
-
-    try {
-      // Stage 1 — IPFS
-      setUploadStage("ipfs");
-      ipfsHash = await uploadToIPFS(file);
-      console.log("✅ IPFS hash:", ipfsHash);
-
-      // Stage 2 — MetaMask signing
-      setUploadStage("signing");
-      const enc = encryptData(ipfsHash);
-      const contract = await getContract(true);    // triggers MetaMask popup
-      const tx = await contract.uploadRecord(account, enc, file.type, file.name);
-
-      // Stage 3 — on-chain mining
-      setUploadStage("mining");
-      const receipt = await tx.wait();
-      console.log("✅ TX confirmed:", receipt.hash);
-
-      // Success
-      setUploadStage("success");
-      addToast("Record uploaded & stored on Sepolia! 🚀", "success");
-
-      // Reset after 2.5s so user can see the green state
-      setTimeout(async () => {
-        setUploadStage("idle");
-        setFile(null);
-        const fi = document.getElementById("fileInput");
-        if (fi) fi.value = "";
-        await fetchRecords();
-      }, 2500);
-
-    } catch (err) {
-      console.error("Upload error:", err);
-
-      // Specific error messages per stage
-      let msg = "Upload failed";
-      if (uploadStage === "ipfs" || (err.message && err.message.includes("IPFS"))) {
-        msg = "IPFS upload failed — check your Pinata API keys";
-      } else if (err.code === 4001 || err.code === "ACTION_REJECTED") {
-        msg = "Transaction rejected in MetaMask";
-      } else if (err.code === "INSUFFICIENT_FUNDS") {
-        msg = "Not enough Sepolia ETH for gas";
-      } else if (err.reason) {
-        msg = "Contract error: " + err.reason;
-      } else if (err.message) {
-        msg = err.message.slice(0, 100);
-      }
-
-      addToast(msg, "error");
-      setUploadStage("error");
-
-      // Auto-reset error button after 4s
-      setTimeout(() => setUploadStage("idle"), 4000);
-    }
-  }
-
-  // ── Access control ──
-  async function grantAccess(addr) {
-    if (!addr || !addr.startsWith("0x") || addr.length !== 42)
-      return addToast("Enter a valid 0x wallet address (42 chars)", "error");
-    if (addr.toLowerCase() === account?.toLowerCase())
-      return addToast("You can't grant access to yourself", "error");
-    try {
-      const exists = doctorList.some((d) => d.toLowerCase() === addr.toLowerCase());
-      if (exists) return addToast("That doctor already has access", "error");
-      const contract = await getContract(true);
-      addToast("Confirm in MetaMask…", "info");
-      const tx = await contract.grantAccess(addr);
-      addToast("Waiting for confirmation…", "info");
-      await tx.wait();
-      addToast("Access granted ✅", "success");
-      setDoctorAddress("");
-      setDoctorList((prev) => [...prev, addr]);
-    } catch (err) {
-      const msg = err.code === 4001 ? "Rejected in MetaMask" : (err.reason || "Failed to grant access");
-      addToast(msg, "error");
-    }
-  }
-
-  async function revokeAccess(addr) {
-    try {
-      const contract = await getContract(true);
-      addToast("Confirm in MetaMask…", "info");
-      const tx = await contract.revokeAccess(addr);
-      addToast("Waiting for confirmation…", "info");
-      await tx.wait();
-      addToast("Access revoked ✅", "success");
-      setDoctorList((prev) => prev.filter((d) => d.toLowerCase() !== addr.toLowerCase()));
-    } catch (err) {
-      const msg = err.code === 4001 ? "Rejected in MetaMask" : (err.reason || "Failed to revoke");
-      addToast(msg, "error");
-    }
-  }
-
-  // ── Render guards ──
-  if (pageState === "loading")     return <LoadingSpinner />;
-  if (pageState === "notconnected") return <NotConnected onConnect={requestAndInit} />;
-  if (pageState === "wrongrole")   return <WrongRole role={userRole} address={account} />;
-
-  const totalPages    = Math.ceil(records.length / recordsPerPage);
-  const currentRecords = records.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage);
-  const stage         = STAGES[uploadStage];
-  const isBusy        = !["idle", "error"].includes(uploadStage);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
 
   return (
-    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
-      <Sidebar />
+    <div className="flex">
 
-      <div className="ml-16 flex-1 p-6 text-black dark:text-white">
+      {/* SIDEBAR */}
+      <Sidebar onConnect={handleConnect} />
 
-        {/* Toast stack */}
-        <Toast toasts={toasts} />
+      {/* MAIN */}
+      <div className="flex-1 min-h-screen flex flex-col 
+        bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 
+        dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 
+        text-black dark:text-white transition-all">
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <h1 className="text-3xl font-bold">Patient Dashboard</h1>
-          <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-xl shadow flex items-center gap-3">
-            <div>
-              <p className="text-xs opacity-80">Connected</p>
-              <span className="font-mono text-sm">{account?.slice(0,6)}…{account?.slice(-4)}</span>
+        <LoadingOverlay show={loading} />
+        <ErrorUI message={error} />
+        <Toast message={toastMessage} show={showToast} />
+
+        <div className="flex flex-col items-center flex-grow px-6 py-10">
+
+          {/* HERO */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-10 max-w-6xl w-full">
+            <div className="max-w-xl">
+              <h1 className="text-4xl md:text-5xl font-extrabold mb-6">
+                Smart Healthcare Management System
+              </h1>
+              <h2 className="text-2xl font-semibold mb-4 text-gray-700 dark:text-gray-300">
+                Revolutionizing Healthcare with Blockchain
+              </h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-4">
+                MedTrack is a secure blockchain-based platform that helps manage
+                patient records, doctor access, and hospital data efficiently.
+              </p>
+              <p className="text-gray-600 dark:text-gray-300">
+                It ensures transparency, security, and fast access to medical
+                information for better healthcare services.
+              </p>
             </div>
-            <button
-              onClick={() => { navigator.clipboard.writeText(account); addToast("Address copied 📋"); }}
-              className="bg-white text-blue-600 px-3 py-1 rounded text-xs hover:bg-gray-100 transition"
-            >
-              Copy
-            </button>
-          </div>
-        </div>
 
-        {/* Grant Access */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-1 text-xl">Grant Doctor Access</h2>
-          <p className="text-sm text-gray-500 mb-4">Enter a doctor's wallet address to allow them to view your records.</p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              value={doctorAddress}
-              onChange={(e) => setDoctorAddress(e.target.value)}
-              placeholder="0x… doctor wallet address"
-              className="flex-1 border p-3 rounded-lg text-black dark:text-white dark:bg-gray-700"
-            />
-            <button
-              onClick={() => grantAccess(doctorAddress)}
-              className="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition font-medium"
-            >
-              Grant Access
-            </button>
-          </div>
-        </div>
-
-        {/* Authorized Doctors */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-4 text-xl">Authorized Doctors ({doctorList.length})</h2>
-          {doctorList.length === 0 ? (
-            <p className="text-gray-400 text-center py-4">No doctors authorized yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {doctorList.map((addr, i) => (
-                <div key={i} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <span className="font-mono text-sm break-all flex-1 mr-3 dark:text-gray-300">{addr}</span>
-                  <button
-                    onClick={() => revokeAccess(addr)}
-                    className="bg-red-500 px-3 py-1 text-white rounded hover:bg-red-600 transition text-sm whitespace-nowrap"
-                  >
-                    Revoke
-                  </button>
-                </div>
-              ))}
+            <div className="relative">
+              <img
+                src={`${BASE_PATH}/hero.png`}
+                alt="MedTrack Hero"
+                className="w-[350px] md:w-[420px] drop-shadow-2xl"
+              />
+              <div className="absolute inset-0 bg-blue-400 opacity-20 blur-3xl rounded-full"></div>
             </div>
-          )}
-        </div>
-
-        {/* Upload */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-1 text-xl">Upload Medical Record</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            File → IPFS (Pinata) → encrypted hash → Sepolia blockchain. Supports PDF and images.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              id="fileInput"
-              type="file"
-              accept="image/*,application/pdf"
-              disabled={isBusy}
-              onChange={(e) => {
-                setFile(e.target.files[0]);
-                if (uploadStage === "error") setUploadStage("idle");
-              }}
-              className="flex-1 border p-2 rounded-lg bg-white dark:bg-gray-700 dark:text-white disabled:opacity-50"
-            />
-            <button
-              onClick={uploadRecord}
-              disabled={isBusy || !file}
-              className={`text-white px-6 py-3 rounded-lg transition font-medium min-w-[180px] flex items-center justify-center gap-2
-                ${!file && uploadStage === "idle" ? "bg-gray-400 cursor-not-allowed" : stage.color}
-                ${isBusy ? "opacity-90" : ""}
-                disabled:opacity-60`}
-            >
-              {isBusy && (
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
-              )}
-              {uploadStage === "success" && <span>✓</span>}
-              {stage.label}
-            </button>
           </div>
 
-          {/* Progress indicator */}
-          <UploadProgress stage={uploadStage} />
-        </div>
-
-        {/* Records */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-2xl">My Medical Records ({records.length})</h2>
-            <button onClick={fetchRecords} className="text-blue-500 hover:underline text-sm">↻ Refresh</button>
-          </div>
-
-          {currentRecords.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow text-center text-gray-400">
-              No records yet. Upload your first medical record above!
+          {/* SYSTEM HIGHLIGHTS */}
+          <div className="grid md:grid-cols-3 gap-6 mt-16 max-w-6xl w-full">
+            <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg shadow-md">
+              <h3 className="font-semibold text-lg mb-2 text-blue-600">Patient Ownership</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Patients control access to their medical data securely.
+              </p>
             </div>
-          ) : (
-            currentRecords.map((rec, i) => (
-              <div key={i} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
-                <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                  <p className="font-semibold text-lg dark:text-white">{rec.fileName}</p>
-                  <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
-                    {rec.fileType?.includes("pdf") ? "PDF" : "Image"}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500 mb-3">{rec.timestamp}</p>
-                <FileViewer url={getIPFSUrl(rec.hash)} fileType={rec.fileType} />
+            <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg shadow-md">
+              <h3 className="font-semibold text-lg mb-2 text-blue-600">Doctor Access Control</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Only authorized doctors can view or update records.
+              </p>
+            </div>
+            <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg shadow-md">
+              <h3 className="font-semibold text-lg mb-2 text-blue-600">Immutable Records</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Blockchain ensures data cannot be tampered with.
+              </p>
+            </div>
+          </div>
+
+          {/* FEATURES */}
+          <div className="grid md:grid-cols-3 gap-6 mt-16 max-w-6xl w-full">
+            <div className="bg-white/70 dark:bg-gray-800/70 p-6 rounded-2xl shadow-lg text-center">
+              <img src={`${BASE_PATH}/images.png`} alt="Secure" className="w-16 mx-auto mb-4" />
+              <h3 className="font-semibold mb-2 text-lg">🔐 Secure Data</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Patient data is protected using blockchain.
+              </p>
+            </div>
+            <div className="bg-white/70 dark:bg-gray-800/70 p-6 rounded-2xl shadow-lg text-center">
+              <img src={`${BASE_PATH}/images (1).png`} alt="Fast" className="w-16 mx-auto mb-4" />
+              <h3 className="font-semibold mb-2 text-lg">⚡ Fast Access</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Doctors can quickly access records.
+              </p>
+            </div>
+            <div className="bg-white/70 dark:bg-gray-800/70 p-6 rounded-2xl shadow-lg text-center">
+              <img src={`${BASE_PATH}/images(2).jpg`} alt="Tracking" className="w-16 mx-auto mb-4" />
+              <h3 className="font-semibold mb-2 text-lg">📊 Smart Tracking</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Track medical history easily.
+              </p>
+            </div>
+          </div>
+
+          {/* HOW IT WORKS */}
+          <div className="mt-20 max-w-6xl w-full text-center">
+            <h2 className="text-3xl font-bold mb-10">How MedTrack Works</h2>
+            <div className="grid md:grid-cols-3 gap-8">
+              <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 shadow">
+                <h3 className="font-semibold text-lg mb-2 text-blue-600">1. Connect Wallet</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Secure login using blockchain wallet.
+                </p>
               </div>
-            ))
-          )}
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex justify-center gap-3 mt-6">
-            <button onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}
-              className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 disabled:opacity-50">← Prev</button>
-            <span className="px-4 py-2 dark:text-white">Page {currentPage} of {totalPages}</span>
-            <button onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}
-              className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 disabled:opacity-50">Next →</button>
+              <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 shadow">
+                <h3 className="font-semibold text-lg mb-2 text-blue-600">2. Manage Records</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Upload and control medical data.
+                </p>
+              </div>
+              <div className="p-6 rounded-2xl bg-white/60 dark:bg-gray-800/60 shadow">
+                <h3 className="font-semibold text-lg mb-2 text-blue-600">3. Secure Access</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Doctors access data with permission.
+                </p>
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* MODULES */}
+          <div className="mt-20 max-w-6xl w-full">
+            <h2 className="text-3xl font-bold mb-10 text-center">Platform Modules</h2>
+            <div className="grid md:grid-cols-3 gap-8">
+              <div className="p-6 rounded-2xl bg-blue-500 text-white shadow-lg">
+                <h3 className="text-xl font-semibold">Admin Panel</h3>
+              </div>
+              <div className="p-6 rounded-2xl bg-teal-500 text-white shadow-lg">
+                <h3 className="text-xl font-semibold">Doctor Dashboard</h3>
+              </div>
+              <div className="p-6 rounded-2xl bg-purple-500 text-white shadow-lg">
+                <h3 className="text-xl font-semibold">Patient Portal</h3>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );

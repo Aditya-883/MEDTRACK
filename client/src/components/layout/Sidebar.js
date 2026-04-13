@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
 const SESSION_TIME = 30 * 60 * 1000;
-const BASE_URL = "http://localhost:5000/api";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export default function Sidebar({ onConnect }) {
   const [expanded, setExpanded] = useState(false);
@@ -57,7 +57,6 @@ export default function Sidebar({ onConnect }) {
       const handleChange = (accounts) => {
         if (accounts.length === 0) disconnectWallet();
         else {
-          // If account changed, refresh
           window.location.reload();
         }
       };
@@ -70,13 +69,11 @@ export default function Sidebar({ onConnect }) {
 
   const registerUser = async (address) => {
     try {
-      // Try to fetch existing user first
       const res = await fetch(`${BASE_URL}/users/${address}`);
       if (res.ok) {
         const user = await res.json();
         return user.role;
       }
-      // If not found, register as patient
       const createRes = await fetch(`${BASE_URL}/users/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -126,7 +123,6 @@ export default function Sidebar({ onConnect }) {
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
 
-      // Sign message to verify ownership
       const message = `Login to MedTrack at ${new Date().toISOString()}`;
       const signature = await signer.signMessage(message);
       const recovered = ethers.verifyMessage(message, signature);
@@ -136,7 +132,6 @@ export default function Sidebar({ onConnect }) {
         return;
       }
 
-      // Register/fetch user in backend
       const userRole = await registerUser(address.toLowerCase());
 
       setWallet(address);
