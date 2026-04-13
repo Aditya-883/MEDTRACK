@@ -1,0 +1,11 @@
+# render.yaml — place this in the ROOT of your repository.
+# Render will auto-detect it and configure your backend service.
+
+services:
+  - type: web
+    name: medtrack-backend
+    runtime: node
+    rootDir: backend          # tells Render to cd into /backend
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free                # change to "starter" etc. if needed
