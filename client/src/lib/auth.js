@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost:5000/api";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL
 
 // ADMIN LOGIN (signature-based, stores JWT)
 export async function adminLogin() {
