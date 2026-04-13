@@ -1,12 +1,14 @@
-export const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+//  after deploying contract to Sepolia
+export const CONTRACT_ADDRESS = "0x6dc692E592255Edbd1e31bBd781f907CbD9960D6";
 
 export const NETWORK = {
-  chainId: "0x7a69", // 33137 in hex (Hardhat)
-  chainName: "Hardhat Local",
-  rpcUrls: ["http://127.0.0.1:8545"],
+  chainId: "0xaa36a7", // Sepolia testnet (11155111 in hex)
+  chainName: "Sepolia Testnet",
+  rpcUrls: ["https://rpc.sepolia.org"],
   nativeCurrency: {
-    name: "ETH",
+    name: "SepoliaETH",
     symbol: "ETH",
     decimals: 18,
   },
+  blockExplorerUrls: ["https://sepolia.etherscan.io"],
 };

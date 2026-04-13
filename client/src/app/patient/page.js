@@ -1,158 +1,235 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../../components/layout/Sidebar";
 import { getContract } from "../../web3/contract";
 import { encryptData, decryptData } from "../../utils/encryption";
 import { uploadToIPFS } from "../../web3/ipfs";
 import { checkUserRole } from "../../lib/auth";
-import { getIPFSUrl } from '../../utils/ipfsGateway';
-import FileViewer from '../../components/FileViewer';
+import { getIPFSUrl } from "../../utils/ipfsGateway";
+import FileViewer from "../../components/FileViewer";
 
-function Toast({ toast }) {
-  if (!toast) return null;
+// Upload stages
+const STAGES = {
+  idle:       { label: "Upload Record",        color: "bg-blue-500 hover:bg-blue-600" },
+  ipfs:       { label: "Uploading to IPFS…",   color: "bg-yellow-500 cursor-not-allowed" },
+  signing:    { label: "Confirm in MetaMask…", color: "bg-orange-500 cursor-not-allowed" },
+  mining:     { label: "Confirming on chain…", color: "bg-purple-500 cursor-not-allowed" },
+  success:    { label: "✓ Uploaded!",          color: "bg-green-500 cursor-not-allowed" },
+  error:      { label: "✗ Failed — Retry",     color: "bg-red-500 hover:bg-red-600" },
+};
+
+// Toast
+function Toast({ toasts }) {
   return (
-    <div className={`fixed top-5 right-5 px-4 py-2 rounded shadow text-white z-50
-      ${toast.type === "error" ? "bg-red-500" : "bg-green-500"}`}>
-      {toast.msg}
+    <div className="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium
+            flex items-center gap-2 min-w-[260px] max-w-sm
+            transition-all duration-300 animate-slide-in
+            ${t.type === "error" ? "bg-red-500" : t.type === "success" ? "bg-green-600" : "bg-gray-800"}`}
+        >
+          <span className="text-lg leading-none">
+            {t.type === "error" ? "✗" : t.type === "success" ? "✓" : "ℹ"}
+          </span>
+          {t.msg}
+        </div>
+      ))}
     </div>
   );
 }
 
-function LoadingOverlay({ show }) {
-  if (!show) return null;
+// ─── Upload progress bar ──────────────────────────────────────────
+function UploadProgress({ stage }) {
+  if (stage === "idle" || stage === "error") return null;
+
+  const steps = [
+    { key: "ipfs",    label: "IPFS Upload" },
+    { key: "signing", label: "MetaMask Sign" },
+    { key: "mining",  label: "On-chain Confirm" },
+    { key: "success", label: "Done" },
+  ];
+  const stageIndex = steps.findIndex((s) => s.key === stage);
 
   return (
-    <div className="fixed inset-0 bg-white/60 dark:bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
-      <div className="animate-pulse text-lg font-semibold">
-        Loading...
+    <div className="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600">
+      <div className="flex items-center justify-between mb-2">
+        {steps.map((step, i) => {
+          const done = i < stageIndex || stage === "success";
+          const active = i === stageIndex && stage !== "success";
+          return (
+            <div key={step.key} className="flex flex-col items-center gap-1 flex-1">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500
+                ${done ? "bg-green-500 text-white" : active ? "bg-blue-500 text-white ring-4 ring-blue-200" : "bg-gray-200 dark:bg-gray-600 text-gray-400"}`}>
+                {done ? "✓" : active ? (
+                  <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+                ) : i + 1}
+              </div>
+              <span className={`text-xs text-center leading-tight hidden sm:block
+                ${done ? "text-green-600 dark:text-green-400" : active ? "text-blue-600 dark:text-blue-400 font-semibold" : "text-gray-400"}`}>
+                {step.label}
+              </span>
+              {i < steps.length - 1 && (
+                <div className={`absolute hidden`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {/* connector bar */}
+      <div className="relative h-1 bg-gray-200 dark:bg-gray-600 rounded-full mt-1 mx-3">
+        <div
+          className="absolute top-0 left-0 h-1 bg-blue-500 rounded-full transition-all duration-700"
+          style={{ width: stage === "success" ? "100%" : `${(stageIndex / (steps.length - 1)) * 100}%` }}
+        />
+      </div>
+      <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-3">
+        {stage === "ipfs"    && "Storing file on IPFS via Pinata…"}
+        {stage === "signing" && "Please open MetaMask and confirm the transaction."}
+        {stage === "mining"  && "Transaction submitted. Waiting for Sepolia confirmation (~15–30s)…"}
+        {stage === "success" && "Record is stored on the blockchain! ✅"}
+      </p>
+    </div>
+  );
+}
+
+// ─── Loading screen ───────────────────────────────────────────────
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
+        <p className="text-gray-600 dark:text-gray-300">Checking access…</p>
       </div>
     </div>
   );
 }
 
-export default function PatientPage() {
+function NotConnected({ onConnect }) {
+  return (
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
+      <Sidebar />
+      <div className="ml-16 flex-1 flex items-center justify-center">
+        <div className="text-center bg-white dark:bg-gray-800 p-10 rounded-2xl shadow-xl max-w-md w-full">
+          <div className="text-5xl mb-4">🔗</div>
+          <h2 className="text-2xl font-bold dark:text-white mb-2">Connect Your Wallet</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">
+            Connect your MetaMask wallet to access the Patient Dashboard.
+          </p>
+          <button onClick={onConnect}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold transition">
+            Connect Wallet
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
+function WrongRole({ role, address }) {
   const router = useRouter();
+  const map = { admin: "/admin", doctor: "/doctor" };
+  return (
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
+      <Sidebar />
+      <div className="ml-16 flex-1 flex items-center justify-center">
+        <div className="text-center bg-white dark:bg-gray-800 p-10 rounded-2xl shadow-xl max-w-md w-full">
+          <div className="text-5xl mb-4">🚫</div>
+          <h2 className="text-2xl font-bold dark:text-white mb-2">Wrong Role</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-2">This page is for <strong>Patients</strong> only.</p>
+          <p className="text-sm text-gray-400 mb-6 font-mono">{address?.slice(0,6)}…{address?.slice(-4)} → <strong className="uppercase">{role}</strong></p>
+          <div className="flex gap-2 justify-center">
+            {map[role] && <button onClick={() => router.push(map[role])} className="bg-blue-500 text-white px-5 py-2 rounded-lg hover:bg-blue-600 transition">Go to {role} →</button>}
+            <button onClick={() => router.push("/")} className="bg-gray-200 dark:bg-gray-600 dark:text-white px-5 py-2 rounded-lg transition">Home</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const [account, setAccount] = useState(null);
-  const [file, setFile] = useState(null);
-  const [records, setRecords] = useState([]);
-  const [doctorList, setDoctorList] = useState([]);
+// ─── Main page ────────────────────────────────────────────────────
+export default function PatientPage() {
+  const router = useRouter();
+  const toastIdRef = useRef(0);
 
-  const [authorized, setAuthorized] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  const [uploading, setUploading] = useState(false);
-  const [toast, setToast] = useState(null);
-
+  const [account, setAccount]         = useState(null);
+  const [userRole, setUserRole]       = useState(null);
+  const [file, setFile]               = useState(null);
+  const [records, setRecords]         = useState([]);
+  const [doctorList, setDoctorList]   = useState([]);
+  const [pageState, setPageState]     = useState("loading");
+  const [uploadStage, setUploadStage] = useState("idle");
+  const [toasts, setToasts]           = useState([]);
   const [doctorAddress, setDoctorAddress] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 4;
 
-// Helpers
-  function formatAddress(addr) {
-    if (!addr) return "";
-    return addr.slice(0, 4) + "..." + addr.slice(-4);
+  // ── Toast helpers ──
+  function addToast(msg, type = "info") {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, msg, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
   }
 
-  function copyAddress(addr) {
-    navigator.clipboard.writeText(addr);
-    showToast("Address copied 📋");
-  }
-
-  function showToast(msg, type = "success") {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2500);
-  }
-
-  //  INIT 
-
-  async function init() {
+  // ── Init ──
+  async function requestAndInit() {
     try {
-      setAuthLoading(true);
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      if (accounts?.length > 0) await init(accounts[0]);
+      else setPageState("notconnected");
+    } catch { setPageState("notconnected"); }
+  }
 
-      if (!window.ethereum) {
-        setAuthorized(false);
-        return;
+  async function init(forcedAccount) {
+    try {
+      setPageState("loading");
+      if (!window.ethereum) { setPageState("notconnected"); return; }
+      let acc = forcedAccount;
+      if (!acc) {
+        const accounts = await window.ethereum.request({ method: "eth_accounts" });
+        acc = accounts?.[0];
       }
-
-      const accounts = await window.ethereum.request({
-        method: "eth_accounts",
-      });
-
-      if (!accounts || accounts.length === 0) {
-        setAuthorized(false);
-        return;
-      }
-
-      const acc = accounts[0];
+      if (!acc) { setPageState("notconnected"); return; }
       setAccount(acc);
-
       const user = await checkUserRole(acc);
-
-      if (!user || user.role !== "patient") {
-        setAuthorized(false);
+      if (!user) {
+        addToast("Cannot reach backend. Is the server running on port 5000?", "error");
+        setPageState("notconnected");
         return;
       }
-
-      setAuthorized(true);
-
+      setUserRole(user.role);
+      if (user.role !== "patient") { setPageState("wrongrole"); return; }
+      setPageState("ready");
       await fetchDoctors(acc);
       await fetchRecords();
-
     } catch (err) {
       console.error("Init error:", err);
-      setAuthorized(false);
-    } finally {
-      setAuthLoading(false);
+      addToast("Initialisation failed: " + err.message, "error");
+      setPageState("notconnected");
     }
   }
-
-    // re-init instead rather than doing the reload 
-  const handleAccountsChanged = async (accounts) => {
-    console.log("🔄 Patient: Account changed");
-
-    const newAcc = accounts[0];
-
-    setAuthorized(null); // reset UI
-    setAccount(newAcc);
-
-    await init(); // re-run full logic
-  };
-
 
   useEffect(() => {
     init();
-
     if (window.ethereum) {
-      window.ethereum.on("accountsChanged", handleAccountsChanged);
+      const handleChange = () => window.location.reload();
+      window.ethereum.on("accountsChanged", handleChange);
+      return () => window.ethereum.removeListener("accountsChanged", handleChange);
     }
-
-    return () => {
-      if (window.ethereum) {
-        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
-      }
-    };
   }, []);
 
-// REDIRECT 
-  useEffect(() => {
-    if (!authLoading && authorized === false) {
-      router.push("/unauthorized");
-    }
-  }, [authLoading, authorized, router]);
-
-// Fetch 
+  // ── Data fetchers ──
   async function fetchDoctors(acc) {
     try {
       const contract = await getContract(false);
       const docs = await contract.getAuthorizedDoctors(acc);
       setDoctorList([...docs]);
-    } catch (error) {
-      console.error("Fetch doctors error:", error);
-      setDoctorList([]);
+    } catch (err) {
+      console.error("Fetch doctors error:", err);
     }
   }
 
@@ -160,194 +237,194 @@ export default function PatientPage() {
     try {
       const contract = await getContract(false);
       const data = await contract.viewMyRecords();
-
-      const formatted = data.map(r => {
-        const decrypted = decryptData(r.ipfsHash);
-
+      const formatted = data.map((r) => {
+        let hash = r.ipfsHash;
+        try { const d = decryptData(r.ipfsHash); if (d) hash = d; } catch {}
         return {
-          hash: decrypted,
+          hash,
           fileType: r.fileType,
           fileName: r.fileName,
           timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString(),
         };
       });
-
       setRecords(formatted);
       setCurrentPage(1);
-    } catch (error) {
-      console.error("Fetch records error:", error);
-      setRecords([]);
+    } catch (err) {
+      console.error("Fetch records error:", err);
     }
   }
 
-
+  // ── Upload — staged ──
   async function uploadRecord() {
-    if (!file) return showToast("Select file", "error");
+    if (!file) return addToast("Please select a file first", "error");
+    if (uploadStage !== "idle" && uploadStage !== "error") return;
+
+    let ipfsHash = null;
 
     try {
-      setUploading(true);
+      // Stage 1 — IPFS
+      setUploadStage("ipfs");
+      ipfsHash = await uploadToIPFS(file);
+      console.log("✅ IPFS hash:", ipfsHash);
 
-      const contract = await getContract(true);
-      const hash = await uploadToIPFS(file);
-      const enc = encryptData(hash);
-
+      // Stage 2 — MetaMask signing
+      setUploadStage("signing");
+      const enc = encryptData(ipfsHash);
+      const contract = await getContract(true);    // triggers MetaMask popup
       const tx = await contract.uploadRecord(account, enc, file.type, file.name);
-      await tx.wait();
 
-      showToast("Uploaded 🚀");
+      // Stage 3 — on-chain mining
+      setUploadStage("mining");
+      const receipt = await tx.wait();
+      console.log("✅ TX confirmed:", receipt.hash);
 
-      setFile(null);
-      document.getElementById("fileInput").value = "";
+      // Success
+      setUploadStage("success");
+      addToast("Record uploaded & stored on Sepolia! 🚀", "success");
 
-      await fetchRecords();
+      // Reset after 2.5s so user can see the green state
+      setTimeout(async () => {
+        setUploadStage("idle");
+        setFile(null);
+        const fi = document.getElementById("fileInput");
+        if (fi) fi.value = "";
+        await fetchRecords();
+      }, 2500);
 
-    } catch (error) {
-      console.error("Upload error:", error);
-      showToast("Upload failed", "error");
-    } finally {
-      setUploading(false);
-    }
-  }
+    } catch (err) {
+      console.error("Upload error:", err);
 
-  async function grantAccess(addr) {
-    if (!addr) {
-      showToast("Please enter doctor address", "error");
-      return;
-    }
-
-    try {
-      const contract = await getContract(true);
-
-      const exists = doctorList.some(d => d.toLowerCase() === addr.toLowerCase());
-      if (exists) {
-        return showToast("Already has access", "error");
+      // Specific error messages per stage
+      let msg = "Upload failed";
+      if (uploadStage === "ipfs" || (err.message && err.message.includes("IPFS"))) {
+        msg = "IPFS upload failed — check your Pinata API keys";
+      } else if (err.code === 4001 || err.code === "ACTION_REJECTED") {
+        msg = "Transaction rejected in MetaMask";
+      } else if (err.code === "INSUFFICIENT_FUNDS") {
+        msg = "Not enough Sepolia ETH for gas";
+      } else if (err.reason) {
+        msg = "Contract error: " + err.reason;
+      } else if (err.message) {
+        msg = err.message.slice(0, 100);
       }
 
+      addToast(msg, "error");
+      setUploadStage("error");
+
+      // Auto-reset error button after 4s
+      setTimeout(() => setUploadStage("idle"), 4000);
+    }
+  }
+
+  // ── Access control ──
+  async function grantAccess(addr) {
+    if (!addr || !addr.startsWith("0x") || addr.length !== 42)
+      return addToast("Enter a valid 0x wallet address (42 chars)", "error");
+    if (addr.toLowerCase() === account?.toLowerCase())
+      return addToast("You can't grant access to yourself", "error");
+    try {
+      const exists = doctorList.some((d) => d.toLowerCase() === addr.toLowerCase());
+      if (exists) return addToast("That doctor already has access", "error");
+      const contract = await getContract(true);
+      addToast("Confirm in MetaMask…", "info");
       const tx = await contract.grantAccess(addr);
+      addToast("Waiting for confirmation…", "info");
       await tx.wait();
-
-      showToast("Access Granted ✅");
+      addToast("Access granted ✅", "success");
       setDoctorAddress("");
-
-      //   UI update
-      setDoctorList(prev => [...prev, addr]);
-
-    } catch (error) {
-      console.error("Grant access error:", error);
-      showToast("Failed to grant access", "error");
+      setDoctorList((prev) => [...prev, addr]);
+    } catch (err) {
+      const msg = err.code === 4001 ? "Rejected in MetaMask" : (err.reason || "Failed to grant access");
+      addToast(msg, "error");
     }
   }
 
   async function revokeAccess(addr) {
     try {
       const contract = await getContract(true);
+      addToast("Confirm in MetaMask…", "info");
       const tx = await contract.revokeAccess(addr);
+      addToast("Waiting for confirmation…", "info");
       await tx.wait();
-
-      showToast("Access Revoked ❌");
-
-      //  instant removal
-      setDoctorList(prev =>
-        prev.filter(d => d.toLowerCase() !== addr.toLowerCase())
-      );
-
-    } catch (error) {
-      console.error("Revoke access error:", error);
-      showToast("Failed to revoke access", "error");
+      addToast("Access revoked ✅", "success");
+      setDoctorList((prev) => prev.filter((d) => d.toLowerCase() !== addr.toLowerCase()));
+    } catch (err) {
+      const msg = err.code === 4001 ? "Rejected in MetaMask" : (err.reason || "Failed to revoke");
+      addToast(msg, "error");
     }
   }
 
-  /* ================= PAGINATION ================= */
+  // ── Render guards ──
+  if (pageState === "loading")     return <LoadingSpinner />;
+  if (pageState === "notconnected") return <NotConnected onConnect={requestAndInit} />;
+  if (pageState === "wrongrole")   return <WrongRole role={userRole} address={account} />;
 
-  const totalPages = Math.ceil(records.length / recordsPerPage);
-
-  const currentRecords = records.slice(
-    (currentPage - 1) * recordsPerPage,
-    currentPage * recordsPerPage
-  );
-
-// Loading & Unauthorized handling
-  if (authLoading) {
-    return (
-      <div className="flex min-h-screen">
-        <Sidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <LoadingOverlay show={true} />
-        </div>
-      </div>
-    );
-  }
-
+  const totalPages    = Math.ceil(records.length / recordsPerPage);
+  const currentRecords = records.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage);
+  const stage         = STAGES[uploadStage];
+  const isBusy        = !["idle", "error"].includes(uploadStage);
 
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
-
       <Sidebar />
 
-      <div className="flex-1 p-6 text-black dark:text-white">
+      <div className="ml-16 flex-1 p-6 text-black dark:text-white">
 
-        <Toast toast={toast} />
+        {/* Toast stack */}
+        <Toast toasts={toasts} />
 
-        <h1 className="text-3xl font-bold mb-6">Patient Dashboard</h1>
-
-        {account && (
-          <div className="mb-6 w-full">
-            <div className="relative bg-gradient-to-r from-blue-500 to-indigo-600 
-                  text-white px-6 py-3 rounded-xl shadow-lg
-                  flex items-center justify-between">
-
-              <div>
-                <p className="text-xs opacity-80">Connected Wallet</p>
-                <span className="font-mono">{formatAddress(account)}</span>
-              </div>
-
-              <button
-                  onClick={() => copyAddress(account)}
-                  className="bg-white text-blue-600 px-4 py-1 rounded hover:bg-gray-100 transition shrink-0"
-              >
-                Copy
-              </button>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <h1 className="text-3xl font-bold">Patient Dashboard</h1>
+          <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-xl shadow flex items-center gap-3">
+            <div>
+              <p className="text-xs opacity-80">Connected</p>
+              <span className="font-mono text-sm">{account?.slice(0,6)}…{account?.slice(-4)}</span>
             </div>
+            <button
+              onClick={() => { navigator.clipboard.writeText(account); addToast("Address copied 📋"); }}
+              className="bg-white text-blue-600 px-3 py-1 rounded text-xs hover:bg-gray-100 transition"
+            >
+              Copy
+            </button>
           </div>
-        )}
+        </div>
 
-        {/* DOCTOR ACCESS */}
+        {/* Grant Access */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-4 text-xl">Grant Doctor Access</h2>
-
-          <div className="flex flex-col sm:flex-row gap-4">
+          <h2 className="font-semibold mb-1 text-xl">Grant Doctor Access</h2>
+          <p className="text-sm text-gray-500 mb-4">Enter a doctor's wallet address to allow them to view your records.</p>
+          <div className="flex flex-col sm:flex-row gap-3">
             <input
               value={doctorAddress}
               onChange={(e) => setDoctorAddress(e.target.value)}
-              placeholder="Enter doctor's wallet address"
-              className="flex-1 border p-3 rounded text-black dark:text-white dark:bg-gray-700"
+              placeholder="0x… doctor wallet address"
+              className="flex-1 border p-3 rounded-lg text-black dark:text-white dark:bg-gray-700"
             />
-
             <button
               onClick={() => grantAccess(doctorAddress)}
-              className="bg-green-500 text-white px-6 py-3 rounded hover:bg-green-600 transition"
+              className="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition font-medium"
             >
               Grant Access
             </button>
           </div>
         </div>
 
-        {/* DOCTOR LIST */}
+        {/* Authorized Doctors */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-4 text-xl">Authorized Doctors</h2>
-
+          <h2 className="font-semibold mb-4 text-xl">Authorized Doctors ({doctorList.length})</h2>
           {doctorList.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No doctors have access to your records yet</p>
+            <p className="text-gray-400 text-center py-4">No doctors authorized yet.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {doctorList.map((addr, i) => (
                 <div key={i} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <span className="font-mono text-sm break-all flex-1 mr-3">{addr}</span>
+                  <span className="font-mono text-sm break-all flex-1 mr-3 dark:text-gray-300">{addr}</span>
                   <button
                     onClick={() => revokeAccess(addr)}
-                    className="bg-red-500 px-3 py-1 text-white rounded hover:bg-red-600 transition whitespace-nowrap"
+                    className="bg-red-500 px-3 py-1 text-white rounded hover:bg-red-600 transition text-sm whitespace-nowrap"
                   >
-                    Revoke Access
+                    Revoke
                   </button>
                 </div>
               ))}
@@ -355,84 +432,82 @@ export default function PatientPage() {
           )}
         </div>
 
-        {/* UPLOAD */}
+        {/* Upload */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow mb-6">
-          <h2 className="font-semibold mb-4 text-xl">Upload Medical Record</h2>
+          <h2 className="font-semibold mb-1 text-xl">Upload Medical Record</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            File → IPFS (Pinata) → encrypted hash → Sepolia blockchain. Supports PDF and images.
+          </p>
 
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-3">
             <input
               id="fileInput"
               type="file"
-              onChange={(e) => setFile(e.target.files[0])}
-              className="flex-1 border p-2 rounded bg-white dark:bg-gray-700"
+              accept="image/*,application/pdf"
+              disabled={isBusy}
+              onChange={(e) => {
+                setFile(e.target.files[0]);
+                if (uploadStage === "error") setUploadStage("idle");
+              }}
+              className="flex-1 border p-2 rounded-lg bg-white dark:bg-gray-700 dark:text-white disabled:opacity-50"
             />
-
             <button
               onClick={uploadRecord}
-              disabled={uploading}
-              className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition disabled:opacity-50"
+              disabled={isBusy || !file}
+              className={`text-white px-6 py-3 rounded-lg transition font-medium min-w-[180px] flex items-center justify-center gap-2
+                ${!file && uploadStage === "idle" ? "bg-gray-400 cursor-not-allowed" : stage.color}
+                ${isBusy ? "opacity-90" : ""}
+                disabled:opacity-60`}
             >
-              {uploading ? "Uploading..." : "Upload Record"}
+              {isBusy && (
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+              )}
+              {uploadStage === "success" && <span>✓</span>}
+              {stage.label}
             </button>
           </div>
+
+          {/* Progress indicator */}
+          <UploadProgress stage={uploadStage} />
         </div>
 
-        {/* RECORDS */}
+        {/* Records */}
         <div className="space-y-4">
-          <h2 className="font-semibold text-2xl">My Medical Records</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-2xl">My Medical Records ({records.length})</h2>
+            <button onClick={fetchRecords} className="text-blue-500 hover:underline text-sm">↻ Refresh</button>
+          </div>
 
           {currentRecords.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow text-center text-gray-500">
-              No records found. Upload your first medical record!
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow text-center text-gray-400">
+              No records yet. Upload your first medical record above!
             </div>
           ) : (
             currentRecords.map((rec, i) => (
               <div key={i} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
                 <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                  <p className="font-semibold text-lg">{rec.fileName}</p>
+                  <p className="font-semibold text-lg dark:text-white">{rec.fileName}</p>
                   <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
-                    {rec.fileType.includes('pdf') ? 'PDF Document' : 'Image File'}
+                    {rec.fileType?.includes("pdf") ? "PDF" : "Image"}
                   </span>
                 </div>
-
-                <p className="text-sm text-gray-500 mb-3">
-                  Uploaded: {rec.timestamp}
-                </p>
-
-                <FileViewer
-                  url={getIPFSUrl(rec.hash)}
-                  fileType={rec.fileType}
-                />
+                <p className="text-sm text-gray-500 mb-3">{rec.timestamp}</p>
+                <FileViewer url={getIPFSUrl(rec.hash)} fileType={rec.fileType} />
               </div>
             ))
           )}
         </div>
 
-        {/* PAGINATION */}
+        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex justify-center gap-3 mt-6">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-              disabled={currentPage === 1}
-              className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 transition disabled:opacity-50"
-            >
-              Previous
-            </button>
-
-            <span className="px-4 py-2">
-              Page {currentPage} of {totalPages}
-            </span>
-
-            <button
-              onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 transition disabled:opacity-50"
-            >
-              Next
-            </button>
+            <button onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}
+              className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 disabled:opacity-50">← Prev</button>
+            <span className="px-4 py-2 dark:text-white">Page {currentPage} of {totalPages}</span>
+            <button onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}
+              className="bg-blue-500 px-4 py-2 text-white rounded hover:bg-blue-600 disabled:opacity-50">Next →</button>
           </div>
         )}
-
       </div>
     </div>
   );

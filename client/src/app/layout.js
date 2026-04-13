@@ -17,7 +17,9 @@ export default function RootLayout({ children }) {
         <WalletListener />
 
         {/* Sidebar */}
-        <Sidebar />
+        <div className="hidden md:block">
+          <Sidebar />
+        </div>
 
         {/* Navbar */}
         <div className="fixed top-0 left-16 w-[calc(100%-4rem)] h-16 z-30">
