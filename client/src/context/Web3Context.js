@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { NETWORK } from "../web3/config";
-import { checkUserRole } from "../lib/auth";
 
 const Web3Context = createContext(null);
 
@@ -11,7 +10,20 @@ export const Web3Provider = ({ children }) => {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  //  CONNECT WALLET
+  const fetchRole = async (address) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/users/${address}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRole(data.role);
+        return data.role;
+      }
+    } catch (err) {
+      console.error("Role fetch error:", err);
+    }
+    return null;
+  };
+
   const connectWallet = async () => {
     try {
       if (typeof window === "undefined" || !window.ethereum) {
@@ -19,7 +31,6 @@ export const Web3Provider = ({ children }) => {
         return;
       }
 
-      //  Switch network FIRST
       await switchNetwork();
 
       const accounts = await window.ethereum.request({
@@ -27,24 +38,14 @@ export const Web3Provider = ({ children }) => {
       });
 
       const addr = accounts[0];
-
-      console.log("Connected Address:", addr);
-
       setAccount(addr);
-
-      // Fetch role from backend
-      const user = await checkUserRole(addr);
-      const userRole = user?.role || "patient";
-      console.log("Detected Role:", userRole);
-
-      setRole(userRole);
+      await fetchRole(addr);
     } catch (err) {
       console.error("Wallet connection error:", err);
       alert("Wallet connection failed");
     }
   };
 
-  //  SWITCH NETWORK
   const switchNetwork = async () => {
     try {
       await window.ethereum.request({
@@ -52,7 +53,6 @@ export const Web3Provider = ({ children }) => {
         params: [{ chainId: NETWORK.chainId }],
       });
     } catch (err) {
-      // Network not added
       if (err.code === 4902) {
         try {
           await window.ethereum.request({
@@ -68,7 +68,6 @@ export const Web3Provider = ({ children }) => {
     }
   };
 
-  //  CHECK EXISTING CONNECTION (ON LOAD)
   useEffect(() => {
     const checkConnection = async () => {
       try {
@@ -80,8 +79,7 @@ export const Web3Provider = ({ children }) => {
           if (accounts.length > 0) {
             const addr = accounts[0];
             setAccount(addr);
-            const user = await checkUserRole(addr);
-            setRole(user?.role || "patient");
+            await fetchRole(addr);
           }
         }
       } catch (err) {
@@ -92,29 +90,33 @@ export const Web3Provider = ({ children }) => {
     };
 
     checkConnection();
+
+    // Listen for account changes
+    if (typeof window !== "undefined" && window.ethereum) {
+      const handleAccountChange = async (accounts) => {
+        if (accounts.length === 0) {
+          setAccount(null);
+          setRole(null);
+        } else {
+          const addr = accounts[0];
+          setAccount(addr);
+          await fetchRole(addr);
+        }
+      };
+      window.ethereum.on("accountsChanged", handleAccountChange);
+      return () => window.ethereum.removeListener("accountsChanged", handleAccountChange);
+    }
   }, []);
 
   return (
-    <Web3Context.Provider
-      value={{
-        account,
-        role,
-        connectWallet,
-        loading,
-      }}
-    >
+    <Web3Context.Provider value={{ account, role, connectWallet, loading }}>
       {children}
     </Web3Context.Provider>
   );
 };
 
-//  CUSTOM HOOK
 export const useWeb3 = () => {
   const context = useContext(Web3Context);
-
-  if (!context) {
-    throw new Error("useWeb3 must be used within Web3Provider");
-  }
-
+  if (!context) throw new Error("useWeb3 must be used within Web3Provider");
   return context;
 };

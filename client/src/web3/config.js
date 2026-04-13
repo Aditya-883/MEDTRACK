@@ -1,4 +1,4 @@
-//  after deploying contract to Sepolia
+// ⚠️  UPDATE THIS after deploying your contract to Sepolia
 export const CONTRACT_ADDRESS = "0x6dc692E592255Edbd1e31bBd781f907CbD9960D6";
 
 export const NETWORK = {

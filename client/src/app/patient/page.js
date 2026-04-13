@@ -10,7 +10,7 @@ import { checkUserRole } from "../../lib/auth";
 import { getIPFSUrl } from "../../utils/ipfsGateway";
 import FileViewer from "../../components/FileViewer";
 
-// Upload stages
+// ─── Upload stages ───────────────────────────────────────────────
 const STAGES = {
   idle:       { label: "Upload Record",        color: "bg-blue-500 hover:bg-blue-600" },
   ipfs:       { label: "Uploading to IPFS…",   color: "bg-yellow-500 cursor-not-allowed" },
@@ -20,7 +20,7 @@ const STAGES = {
   error:      { label: "✗ Failed — Retry",     color: "bg-red-500 hover:bg-red-600" },
 };
 
-// Toast
+// ─── Toast ───────────────────────────────────────────────────────
 function Toast({ toasts }) {
   return (
     <div className="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none">
