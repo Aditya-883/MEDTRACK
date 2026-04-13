@@ -1,10 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "export",
+  basePath: "/medtrack",
+  assetPrefix: "/medtrack/",
+
   // Suppress browser extension hydration warnings
   reactStrictMode: false,
 
-  // Allow IPFS gateway images
+  // Required for static export — no Next.js image optimization server
   images: {
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "gateway.pinata.cloud" },
       { protocol: "https", hostname: "ipfs.io" },
@@ -13,18 +18,8 @@ const nextConfig = {
     ],
   },
 
-  // Allow cross-origin for IPFS content
-  async headers() {
-    return [
-      {
-        source: "/(.*)",
-        headers: [
-          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
-          { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
-        ],
-      },
-    ];
-  },
+  // Note: async headers() is not supported in static export mode
+  // CORS headers are handled by the browser and backend CORS config instead
 };
 
 export default nextConfig;
