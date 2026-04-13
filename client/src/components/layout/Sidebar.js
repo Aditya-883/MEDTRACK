@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
 const SESSION_TIME = 30 * 60 * 1000;
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export default function Sidebar({ onConnect }) {
   const [expanded, setExpanded] = useState(false);
@@ -14,7 +14,6 @@ export default function Sidebar({ onConnect }) {
   const [loading, setLoading] = useState(false);
   const [dark, setDark] = useState(false);
 
-  // Load saved theme
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "dark") {
@@ -23,7 +22,6 @@ export default function Sidebar({ onConnect }) {
     }
   }, []);
 
-  // Apply theme change
   useEffect(() => {
     if (dark) {
       document.documentElement.classList.add("dark");
@@ -34,7 +32,6 @@ export default function Sidebar({ onConnect }) {
     }
   }, [dark]);
 
-  // Restore session on mount
   useEffect(() => {
     const savedWallet = localStorage.getItem("wallet");
     const savedRole = localStorage.getItem("role");
@@ -52,13 +49,10 @@ export default function Sidebar({ onConnect }) {
       }
     }
 
-    // Listen for wallet changes from MetaMask
     if (window.ethereum) {
       const handleChange = (accounts) => {
         if (accounts.length === 0) disconnectWallet();
-        else {
-          window.location.reload();
-        }
+        else window.location.reload();
       };
       window.ethereum.on("accountsChanged", handleChange);
       return () => window.ethereum.removeListener("accountsChanged", handleChange);
@@ -98,7 +92,6 @@ export default function Sidebar({ onConnect }) {
         return;
       }
 
-      // Switch/add Sepolia
       try {
         await window.ethereum.request({
           method: "wallet_switchEthereumChain",
@@ -181,9 +174,7 @@ export default function Sidebar({ onConnect }) {
         shadow-lg flex flex-col justify-between transition-all duration-300
         ${expanded ? "w-64" : "w-16"}`}
       >
-        {/* TOP */}
         <div>
-          {/* Burger */}
           <button
             onClick={() => setExpanded(!expanded)}
             className="mb-6 w-10 h-10 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded transition"
@@ -191,7 +182,6 @@ export default function Sidebar({ onConnect }) {
             ☰
           </button>
 
-          {/* Brand */}
           {expanded && (
             <div className="mb-4 px-2">
               <p className="text-white font-bold text-lg">🏥 MedTrack</p>
@@ -199,7 +189,6 @@ export default function Sidebar({ onConnect }) {
             </div>
           )}
 
-          {/* Nav Links */}
           <div className="flex flex-col gap-2 text-sm">
             <Link href="/" className="flex items-center gap-3 hover:text-blue-400 px-2 py-2 rounded hover:bg-gray-800 transition">
               🏠 {expanded && "Home"}
@@ -215,7 +204,6 @@ export default function Sidebar({ onConnect }) {
             </Link>
           </div>
 
-          {/* Theme Toggle */}
           <div className="mt-4">
             <button
               onClick={() => setDark((prev) => !prev)}
@@ -226,7 +214,6 @@ export default function Sidebar({ onConnect }) {
           </div>
         </div>
 
-        {/* BOTTOM - Wallet */}
         <div>
           {!wallet ? (
             <button

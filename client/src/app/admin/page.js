@@ -4,14 +4,13 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { adminLogin, checkUserRole } from '../../lib/auth';
-
 import AccessDenied from '../../components/ui/AccessDenied';
-import Sidebar from '../../components/layout/Sidebar'; 
+import Sidebar from '../../components/layout/Sidebar';
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 function Toast({ message, show, type }) {
   if (!show) return null;
-
   return (
     <div className={`fixed top-6 right-6 px-4 py-2 rounded-lg shadow-lg z-50 text-white
       ${type === "error" ? "bg-red-500" : "bg-black"}`}>
@@ -22,7 +21,6 @@ function Toast({ message, show, type }) {
 
 function LoadingOverlay({ show }) {
   if (!show) return null;
-
   return (
     <div className="fixed inset-0 bg-white/60 dark:bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
       <div className="animate-pulse text-lg font-semibold text-gray-900 dark:text-white">
@@ -103,7 +101,7 @@ export default function AdminPage() {
 
       const token = localStorage.getItem('token');
 
-      const res = await fetch('${process.env.NEXT_PUBLIC_API_URL', {
+      const res = await fetch(`${BASE_URL}/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -147,7 +145,7 @@ export default function AdminPage() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch('${process.env.NEXT_PUBLIC_API_URL}/users/${modal.address}/role', {
+      const res = await fetch(`${BASE_URL}/users/${modal.address}/role`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -167,7 +165,6 @@ export default function AdminPage() {
         )
       );
 
-      // Also update filtered users
       setFilteredUsers(prev =>
         prev.map(u =>
           u.address === modal.address ? { ...u, role: modal.role } : u
@@ -175,7 +172,6 @@ export default function AdminPage() {
       );
 
       setModal({ open: false, address: '', role: '' });
-
       showToast("Role Updated");
 
     } catch (error) {
@@ -184,28 +180,19 @@ export default function AdminPage() {
     }
   }
 
-  // Handle wallet changes - FORCE PAGE RELOAD
   const handleAccountsChanged = async (accounts) => {
-    console.log("🔄 Admin: Account changed, reloading page...");
-    
-    // Clear all localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('wallet');
-    
-    // Force a hard reload of the page
     window.location.reload();
   };
 
   useEffect(() => {
-    // Initial load
     init();
 
-    // Listen for wallet changes
     if (window.ethereum) {
       window.ethereum.on('accountsChanged', handleAccountsChanged);
     }
 
-    // Cleanup listener
     return () => {
       if (window.ethereum) {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
@@ -213,38 +200,33 @@ export default function AdminPage() {
     };
   }, []);
 
-  // Watch for account changes using an interval as backup (optional)
   useEffect(() => {
     let intervalId;
-    
+
     if (window.ethereum) {
       intervalId = setInterval(async () => {
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
         const currentAddress = accounts[0];
-        
+
         if (currentAddress && currentAccount && currentAddress !== currentAccount) {
-          console.log("🔄 Admin: Account mismatch detected, reloading...");
           window.location.reload();
         }
-      }, 2000); // Check every 2 seconds
+      }, 2000);
     }
-    
+
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
   }, [currentAccount]);
 
-  /*  STATS */
   const totalAdmins = users.filter(u => u.role === 'admin').length;
   const totalDoctors = users.filter(u => u.role === 'doctor').length;
   const totalPatients = users.filter(u => u.role === 'patient').length;
 
-  /*  PAGINATION */
   const indexOfLast = currentPage * usersPerPage;
   const currentUsers = filteredUsers.slice(indexOfLast - usersPerPage, indexOfLast);
   const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
 
-  // Show loading while checking authorization
   if (authorized === null) {
     return <LoadingOverlay show={true} />;
   }
@@ -293,8 +275,8 @@ export default function AdminPage() {
               <option value="patient">Patient</option>
             </select>
 
-            <button 
-              onClick={applyFilters} 
+            <button
+              onClick={applyFilters}
               className="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600 transition"
             >
               Apply Filters
@@ -323,7 +305,7 @@ export default function AdminPage() {
               <h2 className="font-semibold text-lg">User Management</h2>
               <p className="text-sm text-gray-500">Manage user roles and permissions</p>
             </div>
-            
+
             <div className="divide-y dark:divide-gray-700">
               {currentUsers.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
@@ -344,20 +326,20 @@ export default function AdminPage() {
                     </div>
 
                     <div className="flex gap-2">
-                      <button 
-                        onClick={() => setModal({ open: true, address: u.address, role: 'admin' })} 
+                      <button
+                        onClick={() => setModal({ open: true, address: u.address, role: 'admin' })}
                         className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600 transition"
                       >
                         Make Admin
                       </button>
-                      <button 
-                        onClick={() => setModal({ open: true, address: u.address, role: 'doctor' })} 
+                      <button
+                        onClick={() => setModal({ open: true, address: u.address, role: 'doctor' })}
                         className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition"
                       >
                         Make Doctor
                       </button>
-                      <button 
-                        onClick={() => setModal({ open: true, address: u.address, role: 'patient' })} 
+                      <button
+                        onClick={() => setModal({ open: true, address: u.address, role: 'patient' })}
                         className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition"
                       >
                         Make Patient
@@ -379,20 +361,20 @@ export default function AdminPage() {
               >
                 Previous
               </button>
-              
+
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <button
                   key={page}
                   onClick={() => setCurrentPage(page)}
                   className={`px-3 py-1 rounded transition
-                    ${currentPage === page 
-                      ? 'bg-blue-500 text-white' 
+                    ${currentPage === page
+                      ? 'bg-blue-500 text-white'
                       : 'bg-gray-200 dark:bg-gray-700 dark:text-white hover:bg-gray-300'}`}
                 >
                   {page}
                 </button>
               ))}
-              
+
               <button
                 onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
                 disabled={currentPage === totalPages}
