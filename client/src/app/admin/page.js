@@ -1,7 +1,5 @@
 "use client";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminLogin, checkUserRole } from "../../lib/auth";
@@ -152,7 +150,7 @@ export default function AdminPage() {
       // Validate existing token
       if (token) {
         try {
-          const testRes = await fetch(`${BASE_URL}/users`, {
+          const testRes = await fetch("http://localhost:5000/api/users", {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (testRes.status === 401) {
@@ -187,7 +185,7 @@ export default function AdminPage() {
       setLoading(true);
       const token = tokenOverride || localStorage.getItem("token");
 
-      const res = await fetch(`${BASE_URL}/users`, {
+      const res = await fetch("http://localhost:5000/api/users", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -225,7 +223,7 @@ export default function AdminPage() {
       setLoading(true);
       const token = localStorage.getItem("token");
 
-      const res = await fetch(`${BASE_URL}/users/${modal.address}/role`, {
+      const res = await fetch(`http://localhost:5000/api/users/${modal.address}/role`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ role: modal.role }),

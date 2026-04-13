@@ -1,5 +1,6 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
+// ADMIN LOGIN (signature-based, stores JWT)
 export async function adminLogin() {
   if (!window.ethereum) throw new Error("MetaMask not installed");
 
@@ -30,13 +31,19 @@ export async function adminLogin() {
   return data;
 }
 
+// CHECK USER ROLE — auto-registers if not found
 export async function checkUserRole(address) {
   try {
     const normalizedAddress = address.toLowerCase();
+
+    // Try fetching existing user
     const res = await fetch(`${BASE_URL}/users/${normalizedAddress}`);
 
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      return await res.json();
+    }
 
+    // 404 = not registered yet → auto-register as patient
     if (res.status === 404) {
       const createRes = await fetch(`${BASE_URL}/users/register`, {
         method: "POST",
@@ -53,6 +60,7 @@ export async function checkUserRole(address) {
   }
 }
 
+// REGISTER USER explicitly
 export async function registerUser(address, role = "patient") {
   try {
     const res = await fetch(`${BASE_URL}/users/register`, {

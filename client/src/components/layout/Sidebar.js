@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
 const SESSION_TIME = 30 * 60 * 1000;
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const BASE_URL = "http://localhost:5000/api";
 
 export default function Sidebar({ onConnect }) {
   const [expanded, setExpanded] = useState(false);
