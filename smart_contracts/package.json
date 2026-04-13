@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "hardhat compile",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "node": "hardhat node",
+    "test": "hardhat test"
   },
   "keywords": [],
   "author": "",
@@ -15,7 +19,6 @@
     "hardhat": "^2.28.6"
   },
   "dependencies": {
-    "crypto-js": "^4.2.0",
-    "ipfs-http-client": "^60.0.1"
+    "dotenv": "^16.0.0"
   }
 }

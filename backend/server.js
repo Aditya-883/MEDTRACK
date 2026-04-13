@@ -9,27 +9,40 @@ const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 
-// CORS - allow Next.js frontend
+// CORS — allow localhost dev + any Vercel deployment of this project
+const allowedOrigins = [
+  "http://localhost:3000",
+  process.env.CLIENT_URL,           // your production Vercel URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Render health checks, curl, Postman)
+    if (!origin) return callback(null, true);
+    // Allow any Vercel preview deployment (*.vercel.app)
+    if (origin.endsWith(".vercel.app")) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
   credentials: true,
 }));
 
 app.use(express.json());
 
-// Health check
+// Health check — Render pings this to keep the service alive
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
-// Connect DB then start server
-connectDB().then(() => {
+const startServer = async () => {
+  await connectDB();
   const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Server running on port ${PORT}`);
   });
-});
+};
+
+startServer();
