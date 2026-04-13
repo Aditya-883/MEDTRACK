@@ -1,8 +1,4 @@
-// client/src/lib/auth.js
-// Reads the backend URL from an env variable so it works in both
-// development (localhost:5000) and production (Render URL).
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const BASE_URL = "http://localhost:5000/api";
 
 // ADMIN LOGIN (signature-based, stores JWT)
 export async function adminLogin() {
@@ -40,12 +36,14 @@ export async function checkUserRole(address) {
   try {
     const normalizedAddress = address.toLowerCase();
 
+    // Try fetching existing user
     const res = await fetch(`${BASE_URL}/users/${normalizedAddress}`);
 
     if (res.ok) {
       return await res.json();
     }
 
+    // 404 = not registered yet → auto-register as patient
     if (res.status === 404) {
       const createRes = await fetch(`${BASE_URL}/users/register`, {
         method: "POST",
