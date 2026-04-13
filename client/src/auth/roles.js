@@ -1,5 +1,6 @@
+// Role constants — match backend lowercase values
 export const ROLES = Object.freeze({
-  PATIENT: "PATIENT",
-  DOCTOR: "DOCTOR",
-  ADMIN: "ADMIN",
+  PATIENT: "patient",
+  DOCTOR: "doctor",
+  ADMIN: "admin",
 });

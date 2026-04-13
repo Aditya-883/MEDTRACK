@@ -9,12 +9,17 @@ export default function requireAuth(Component, role) {
     const router = useRouter();
 
     useEffect(() => {
-      if (!user || user.role !== role) {
-        router.replace("/");
+      // Only redirect if user is loaded (not null due to init) and role doesn't match
+      if (user !== undefined && (!user || user.role !== role)) {
+        router.replace("/unauthorized");
       }
     }, [user, router]);
 
-    if (!user) return <p className="container">Loading...</p>;
+    // Still initializing
+    if (user === undefined) return <p className="container">Loading...</p>;
+
+    // Not authorized
+    if (!user || user.role !== role) return null;
 
     return <Component />;
   };

@@ -236,7 +236,7 @@ export default function AdminPage() {
 
       <Sidebar />
 
-      <div className="flex-1 min-h-screen flex flex-col bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-900 dark:to-black p-6">
+      <div className="ml-16 flex-1 min-h-screen flex flex-col bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-900 dark:to-black p-6">
 
         <LoadingOverlay show={loading} />
         <Toast message={toast?.msg} show={!!toast} type={toast?.type} />

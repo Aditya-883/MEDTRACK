@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { NETWORK } from "../web3/config";
-import { getRole } from "../lib/roles";
+import { checkUserRole } from "../lib/auth";
 
 const Web3Context = createContext(null);
 
@@ -32,8 +32,9 @@ export const Web3Provider = ({ children }) => {
 
       setAccount(addr);
 
-      // To Set ROLE
-      const userRole = getRole(addr);
+      // Fetch role from backend
+      const user = await checkUserRole(addr);
+      const userRole = user?.role || "patient";
       console.log("Detected Role:", userRole);
 
       setRole(userRole);
@@ -51,7 +52,7 @@ export const Web3Provider = ({ children }) => {
         params: [{ chainId: NETWORK.chainId }],
       });
     } catch (err) {
-      // 👉 Network not added
+      // Network not added
       if (err.code === 4902) {
         try {
           await window.ethereum.request({
@@ -79,7 +80,8 @@ export const Web3Provider = ({ children }) => {
           if (accounts.length > 0) {
             const addr = accounts[0];
             setAccount(addr);
-            setRole(getRole(addr));
+            const user = await checkUserRole(addr);
+            setRole(user?.role || "patient");
           }
         }
       } catch (err) {

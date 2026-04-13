@@ -3,25 +3,33 @@
 import { useEffect, useState } from "react"
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState("light")
+  const [dark, setDark] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") || "light"
-    setTheme(saved)
-    document.documentElement.setAttribute("data-theme", saved)
+    setDark(saved === "dark")
+    if (saved === "dark") {
+      document.documentElement.classList.add("dark")
+    } else {
+      document.documentElement.classList.remove("dark")
+    }
   }, [])
 
   const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light"
-    setTheme(newTheme)
-    localStorage.setItem("theme", newTheme)
-    document.documentElement.setAttribute("data-theme", newTheme)
+    const newDark = !dark
+    setDark(newDark)
+    if (newDark) {
+      document.documentElement.classList.add("dark")
+      localStorage.setItem("theme", "dark")
+    } else {
+      document.documentElement.classList.remove("dark")
+      localStorage.setItem("theme", "light")
+    }
   }
 
   return (
     <button onClick={toggleTheme} style={{ marginLeft: "15px" }}>
-      {theme === "light" ? "🌙 Dark" : "☀️ Light"}
+      {dark ? "🌙 Dark" : "☀️ Light"}
     </button>
   )
 }
-

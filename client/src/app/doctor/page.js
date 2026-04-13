@@ -198,7 +198,7 @@ export default function DoctorPage() {
 
       <Sidebar />
 
-      <div className="flex-1 min-h-screen flex flex-col bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-900 dark:to-black p-6">
+      <div className="ml-16 flex-1 min-h-screen flex flex-col bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-900 dark:to-black p-6">
 
         <LoadingOverlay show={loading} />
         <Toast message={toast?.msg} show={!!toast} type={toast?.type} />
@@ -233,18 +233,18 @@ export default function DoctorPage() {
 
           {/* STATS */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white p-4 rounded-xl shadow">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
               <p className="text-gray-500">Patients Checked</p>
               <h2 className="text-xl font-bold">{stats.patientsChecked}</h2>
             </div>
-            <div className="bg-white p-4 rounded-xl shadow">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
               <p className="text-gray-500">Records Viewed</p>
               <h2 className="text-xl font-bold">{stats.recordsViewed}</h2>
             </div>
           </div>
 
           {/* PATIENT LOOKUP */}
-          <div className="bg-white p-5 rounded-xl shadow space-y-3">
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow space-y-3">
             <h2 className="font-semibold">Patient Lookup</h2>
 
             <input
@@ -285,7 +285,7 @@ export default function DoctorPage() {
               </div>
             ) : (
               records.map((rec, i) => (
-                <div key={i} className="bg-white p-4 rounded-xl shadow">
+                <div key={i} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow">
                   <div className="flex justify-between">
                     <p className="font-semibold">{rec.fileName}</p>
                     <span className="text-xs bg-blue-100 px-2 py-1 rounded">
@@ -307,7 +307,7 @@ export default function DoctorPage() {
           </div>
 
           {/* ACTIVITY */}
-          <div className="bg-white p-5 rounded-xl shadow">
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow">
             <h2 className="font-semibold mb-3">Recent Activity</h2>
 
             {activity.length === 0 ? (
