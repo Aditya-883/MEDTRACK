@@ -3,27 +3,31 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { ethers } = require('ethers');
 const User = require('../models/User');
+const { verifySignature } = require('../controllers/authController');
 
-// Admin signature login
+// Generic signature-based auth (any role)
+router.post('/verify', verifySignature);
+
+// Admin signature login — issues a JWT
 router.post('/login', async (req, res) => {
   try {
     const { address, signature } = req.body;
 
     if (!address || !signature) {
-      return res.status(400).json({ message: "Address and signature required" });
+      return res.status(400).json({ message: 'Address and signature required' });
     }
 
-    const message = "Admin Login";
+    const message = 'Admin Login';
     const recovered = ethers.verifyMessage(message, signature);
 
     if (recovered.toLowerCase() !== address.toLowerCase()) {
-      return res.status(401).json({ message: "Invalid signature" });
+      return res.status(401).json({ message: 'Invalid signature' });
     }
 
     const user = await User.findOne({ address: address.toLowerCase() });
 
     if (!user || user.role !== 'admin') {
-      return res.status(403).json({ message: "Not an admin" });
+      return res.status(403).json({ message: 'Not an admin' });
     }
 
     const token = jwt.sign(
@@ -34,7 +38,7 @@ router.post('/login', async (req, res) => {
 
     res.json({ token, role: user.role, address: user.address });
   } catch (err) {
-    console.error("Auth login error:", err);
+    console.error('Auth login error:', err);
     res.status(500).json({ message: err.message });
   }
 });

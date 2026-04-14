@@ -6,7 +6,7 @@ const { verifyToken, requireAdmin } = require('../middleware/authMiddleware');
 // Public: register wallet
 router.post('/register', createUser);
 
-// Public: get single user by address (for role checks)
+// Public: get single user by address (role checks)
 router.get('/:address', getUser);
 
 // Admin only: list all users

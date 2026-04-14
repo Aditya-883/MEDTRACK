@@ -1,7 +1,7 @@
 {
-  "name": "backend",
+  "name": "medtrack-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "MedTrack Node.js/Express API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
