@@ -5,13 +5,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    lowercase: true,
+    lowercase: true
   },
   role: {
     type: String,
     enum: ['admin', 'doctor', 'patient'],
-    required: true,
-  },
+    required: true
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

@@ -19,7 +19,10 @@ const verifySignature = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { address: user.address, role: user.role },
+      {
+        address: user.address,
+        role: user.role,
+      },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
